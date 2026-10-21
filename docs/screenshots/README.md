@@ -18,3 +18,6 @@ docker run -d --rm --name pf-chrome --network host --shm-size=1g -v $d/chrome:/d
 node scripts/e2e.mjs && cmp $d/chrome/dl/random.bin $d/chrome/in/random.bin && echo round trip ok
 docker stop pf-chrome
 ```
+
+With a Chrome of your own instead of the container, point the script at it and at the folders as that
+Chrome sees them: `CHROME=http://127.0.0.1:<cdp port> IN_DIR=$d/chrome/in DL_DIR=$d/chrome/dl node scripts/e2e.mjs`.
