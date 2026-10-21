@@ -41,7 +41,15 @@ function PeopleShare({ entry, onClose }: { entry: Entry; onClose: () => void }) 
     api.get<Share>(`${V1}/shares/path?path=${encodeURIComponent(entry.path)}`).then(s => { setShare(s); setMembers(s.members || []); setEveryone(s.everyone_perm || '') }).catch(() => {})
   }, [entry.path])
 
-  const others = people.filter(p => p.id !== user?.id && !members.some(m => m.user_id === p.id))
+  const key = (x: { user_id?: number; id?: number; email?: string }) => (x.email || '').toLowerCase() || String(x.user_id ?? x.id)
+  const others = people.filter(p => p.email.toLowerCase() !== user?.email.toLowerCase() && !members.some(m => key(m) === key(p)))
+  const [typed, setTyped] = useState('')
+  const addEmail = () => {
+    const e = typed.trim().toLowerCase()
+    if (!e || members.some(m => (m.email || '').toLowerCase() === e)) return
+    const p = people.find(x => x.email.toLowerCase() === e)
+    setMembers(ms => [...ms, { user_id: p?.id || 0, name: p?.name || '', email: e, perm: 'view' }]); setTyped('')
+  }
   const save = async () => {
     setBusy(true)
     try {
@@ -54,17 +62,21 @@ function PeopleShare({ entry, onClose }: { entry: Entry; onClose: () => void }) 
       <p className="muted small">They see it under <b>Shared with me</b> and over WebDAV. With <b>Can edit</b> they may add, change and delete inside it; what they delete goes to your trash.</p>
       <div className="member-list">
         {members.map(m => (
-          <div key={m.user_id} className="member-row">
+          <div key={key(m)} className="member-row">
             <Avatar user={{ id: m.user_id, name: m.name || '', email: m.email || '', username: '', role: 'member', created_at: '' }} />
             <span className="grow"><b>{m.name || m.email}</b><br /><small className="muted">{m.email}</small></span>
-            <Segmented size="sm" value={m.perm} options={[{ value: 'view' as Perm, label: 'Can view' }, { value: 'edit' as Perm, label: 'Can edit' }]} onChange={p => setMembers(ms => ms.map(x => x.user_id === m.user_id ? { ...x, perm: p } : x))} />
-            <button className="icon-btn" onClick={() => setMembers(ms => ms.filter(x => x.user_id !== m.user_id))} title="Remove"><Icon name="x" size={15} /></button>
+            <Segmented size="sm" value={m.perm} options={[{ value: 'view' as Perm, label: 'Can view' }, { value: 'edit' as Perm, label: 'Can edit' }]} onChange={p => setMembers(ms => ms.map(x => key(x) === key(m) ? { ...x, perm: p } : x))} />
+            <button className="icon-btn" onClick={() => setMembers(ms => ms.filter(x => key(x) !== key(m)))} title="Remove"><Icon name="x" size={15} /></button>
           </div>
         ))}
         {!members.length && <p className="muted small">Not shared with anyone yet.</p>}
       </div>
-      {others.length > 0 && <Select value={0} placeholder="Add a person…" className="btn" options={others.map(p => ({ value: p.id, label: <span className="row"><b>{p.name || p.email}</b><small className="muted">{p.name ? p.email : ''}</small></span> }))} onChange={id => { const p = people.find(x => x.id === id)!; setMembers(ms => [...ms, { user_id: p.id, name: p.name, email: p.email, perm: 'view' }]) }} />}
-      {!people.filter(p => p.id !== user?.id).length && <p className="small muted">Nobody else has an account here yet. People appear once they sign in (Sign in with Pocket Core) or an admin adds them in Settings → People.</p>}
+      {others.length > 0 && <Select value="" placeholder="Add a person…" className="btn" options={others.map(p => ({ value: p.email, label: <span className="row"><b>{p.name || p.email}</b><small className="muted">{p.name ? p.email : ''}</small></span> }))} onChange={email => { const p = people.find(x => x.email === email)!; setMembers(ms => [...ms, { user_id: p.id, name: p.name, email: p.email, perm: 'view' }]) }} />}
+      <form className="row" onSubmit={e => { e.preventDefault(); addEmail() }}>
+        <input type="email" value={typed} onChange={e => setTyped(e.target.value)} placeholder="…or type their email" />
+        <button className="btn" disabled={!typed.trim()}>Add</button>
+      </form>
+      {!others.length && !members.length && <p className="small muted">Nobody else is in this household yet. Add people in Pocket Core (or Settings → People here).</p>}
       <div className="row wrap"><span className="grow">Everyone on this box</span><Segmented size="sm" value={everyone} options={[{ value: '' as const, label: 'No' }, { value: 'view' as const, label: 'Can view' }, { value: 'edit' as const, label: 'Can edit' }]} onChange={setEveryone} /></div>
       <div className="form-actions">
         {share?.id ? <span className="grow small muted">Shared since {new Date(share.created_at).toLocaleDateString()}</span> : <span className="grow" />}

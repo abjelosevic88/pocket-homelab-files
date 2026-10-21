@@ -173,7 +173,8 @@ function MountDialog({ mount, onClose, onSaved }: { mount: Partial<Mount>; onClo
   const [browse, setBrowse] = useState(false)
   useEffect(() => { api.get<Person[]>(`${V1}/people`).then(setPeople).catch(() => {}) }, [])
   const access = m.access || []
-  const setPerm = (uid: number, perm: '' | Perm) => setM(x => ({ ...x, access: perm ? [...(x.access || []).filter(a => a.user_id !== uid), { user_id: uid, perm } as Access] : (x.access || []).filter(a => a.user_id !== uid) }))
+  const same = (a: Access, p: Person) => (a.email || '').toLowerCase() === p.email.toLowerCase() || (!!p.id && a.user_id === p.id)
+  const setPerm = (p: Person, perm: '' | Perm) => setM(x => ({ ...x, access: perm ? [...(x.access || []).filter(a => !same(a, p)), { user_id: p.id, email: p.email, perm } as Access] : (x.access || []).filter(a => !same(a, p)) }))
   const save = async () => {
     try { if (m.id) await api.put(`${V1}/mounts/${m.id}`, m); else await api.post(`${V1}/mounts`, m); toast('Saved'); onSaved() } catch (e) { toast((e as Error).message, 'err') }
   }
@@ -186,11 +187,11 @@ function MountDialog({ mount, onClose, onSaved }: { mount: Partial<Mount>; onClo
         <Field label="Everyone on this box" group><Segmented size="sm" value={m.everyone_perm || ''} onChange={v => setM({ ...m, everyone_perm: v })} options={[{ value: '' as const, label: 'No' }, { value: 'view' as const, label: 'Can view' }, { value: 'edit' as const, label: 'Can edit' }]} /></Field>
         <div className="member-list">
           {people.map(p => {
-            const a = access.find(x => x.user_id === p.id)
-            return <div key={p.id} className="member-row">
+            const a = access.find(x => same(x, p))
+            return <div key={p.email} className="member-row">
               <Avatar user={{ ...p, username: '', role: 'member', created_at: '' }} />
               <span className="grow"><b>{p.name || p.email}</b><br /><small className="muted">{p.email}</small></span>
-              <Segmented size="sm" value={a?.perm || ''} onChange={v => setPerm(p.id, v)} options={[{ value: '' as const, label: 'None' }, { value: 'view' as const, label: 'View' }, { value: 'edit' as const, label: 'Edit' }]} />
+              <Segmented size="sm" value={a?.perm || ''} onChange={v => setPerm(p, v)} options={[{ value: '' as const, label: 'None' }, { value: 'view' as const, label: 'View' }, { value: 'edit' as const, label: 'Edit' }]} />
             </div>
           })}
         </div>

@@ -15,7 +15,7 @@ import (
 // handlePeople lists everyone on the box (name and email only) so people
 // can share with each other.
 func (s *Server) handlePeople(w http.ResponseWriter, r *http.Request) {
-	people, err := s.store.People(r.Context())
+	people, err := s.people(r.Context())
 	if err != nil {
 		s.fail(w, err, "people")
 		return
@@ -96,12 +96,14 @@ func (s *Server) handleSaveShare(w http.ResponseWriter, r *http.Request) {
 		if m.Perm != "edit" {
 			m.Perm = "view"
 		}
+		u, err := s.personFor(ctx, m.UserID, m.Email)
+		if err != nil {
+			s.fail(w, err, "share")
+			return
+		}
+		m.UserID = u.ID
 		if m.UserID == me(r) || seen[m.UserID] {
 			continue
-		}
-		if _, err := s.store.GetUser(ctx, m.UserID); err != nil {
-			writeErr(w, http.StatusBadRequest, "unknown person")
-			return
 		}
 		seen[m.UserID] = true
 		sh.Members = append(sh.Members, m)
@@ -202,6 +204,12 @@ func (s *Server) handleSaveMount(w http.ResponseWriter, r *http.Request) {
 	var access []store.Access
 	seen := map[int64]bool{}
 	for _, a := range in.Access {
+		u, err := s.personFor(ctx, a.UserID, a.Email)
+		if err != nil {
+			s.fail(w, err, "save mount")
+			return
+		}
+		a.UserID = u.ID
 		if seen[a.UserID] {
 			continue
 		}
