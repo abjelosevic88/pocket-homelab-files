@@ -10,7 +10,7 @@ import { Avatar } from '../components/people'
 import { downloadsLabel } from '../components/SendOptions'
 import { Card, Confirm, CopyField, Field, Loading, Modal, PageHeader, Segmented, Select, Switch, Tabs, useAsync, useToast } from '../components/ui'
 
-type Tab = 'profile' | 'links' | 'webdav' | 'mounts' | 'people' | 'about'
+type Tab = 'profile' | 'links' | 'email' | 'webdav' | 'mounts' | 'people' | 'about'
 
 export default function Settings() {
   const { user } = useApp()
@@ -18,7 +18,7 @@ export default function Settings() {
   const tab = (params.get('tab') as Tab) || 'profile'
   const admin = user?.role === 'admin'
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'profile', label: 'Profile' }, { id: 'links', label: 'Links & alerts' }, { id: 'webdav', label: 'WebDAV & apps' },
+    { id: 'profile', label: 'Profile' }, { id: 'links', label: 'Links & alerts' }, { id: 'email', label: 'Email' }, { id: 'webdav', label: 'WebDAV & apps' },
     ...(admin ? [{ id: 'mounts' as Tab, label: 'Mounts' }, { id: 'people' as Tab, label: 'People' }] : []), { id: 'about', label: 'About' },
   ]
   return (
@@ -28,6 +28,7 @@ export default function Settings() {
       <div className="mt">
         {tab === 'profile' && <Profile />}
         {tab === 'links' && <LinksAlerts />}
+        {tab === 'email' && <EmailSettings />}
         {tab === 'webdav' && <WebDAV />}
         {tab === 'mounts' && admin && <Mounts />}
         {tab === 'people' && admin && <People />}
@@ -95,6 +96,59 @@ function LinksAlerts() {
             <button className="btn" onClick={() => api.post(`${V1}/notify/test`).then(() => toast('Sent')).catch(e => toast((e as Error).message, 'err'))}>Send a test</button>
             <button className="btn primary" onClick={() => saveSettings(n as Partial<S>).then(() => toast('Saved'))}>Save</button>
           </div>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+function EmailSettings() {
+  const { settings, setSettings, user } = useApp()
+  const { toast } = useToast()
+  const pick = (st: S | null) => ({ smtp_host: st?.smtp_host || '', smtp_port: st?.smtp_port || 587, smtp_user: st?.smtp_user || '', smtp_password: '', smtp_from: st?.smtp_from || '', smtp_from_name: st?.smtp_from_name || '', smtp_tls: st?.smtp_tls || 'starttls' })
+  const [f, setF] = useState(() => pick(settings))
+  const [to, setTo] = useState(user?.email || '')
+  const [busy, setBusy] = useState(false)
+  if (!settings) return <Loading />
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: k === 'smtp_port' ? Number(e.target.value) : e.target.value })
+  const save = async () => {
+    const next = await api.put<S>(`${V1}/settings`, f)
+    setSettings(next); setF(pick(next))
+    return next
+  }
+  const run = async (test: boolean) => {
+    setBusy(true)
+    try {
+      await save()
+      if (test) { await api.post(`${V1}/email/test`, { to: [to] }); toast(`Test email sent to ${to}`) } else toast('Saved')
+    } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) }
+  }
+  return (
+    <div className="two-col">
+      <Card title="Your mail account">
+        <div className="grid" style={{ gap: 12 }}>
+          <p className="small muted">Links and upload links are emailed from this account, like invoices from Pocket Invoicing. For Gmail use smtp.gmail.com, port 587, STARTTLS and an app password.</p>
+          <div className="two-col tight">
+            <Field label="Server"><input value={f.smtp_host} onChange={set('smtp_host')} placeholder="smtp.example.com" /></Field>
+            <Field label="Port"><input type="number" value={f.smtp_port} onChange={set('smtp_port')} /></Field>
+          </div>
+          <Field label="Encryption" group><Segmented size="sm" value={f.smtp_tls} onChange={v => setF({ ...f, smtp_tls: v, smtp_port: v === 'tls' ? 465 : v === 'none' ? 25 : 587 })} options={[{ value: 'starttls' as const, label: 'STARTTLS (587)' }, { value: 'tls' as const, label: 'TLS/SSL (465)' }, { value: 'none' as const, label: 'None (25)' }]} /></Field>
+          <div className="two-col tight">
+            <Field label="Username"><input value={f.smtp_user} onChange={set('smtp_user')} autoComplete="off" /></Field>
+            <Field label="Password" help={settings.smtp_password_set ? 'A password is stored. Leave blank to keep it.' : undefined}><input type="password" value={f.smtp_password} onChange={set('smtp_password')} autoComplete="new-password" placeholder={settings.smtp_password_set ? '••••••••' : ''} /></Field>
+          </div>
+          <div className="two-col tight">
+            <Field label="From address"><input value={f.smtp_from} onChange={set('smtp_from')} placeholder="you@example.com" /></Field>
+            <Field label="From name"><input value={f.smtp_from_name} onChange={set('smtp_from_name')} placeholder={user?.name} /></Field>
+          </div>
+          <div className="form-actions"><button className="btn primary" disabled={busy} onClick={() => run(false)}>Save</button></div>
+        </div>
+      </Card>
+      <Card title="Check it">
+        <div className="grid" style={{ gap: 12 }}>
+          <Field label="Send a test to"><input value={to} onChange={e => setTo(e.target.value)} /></Field>
+          <div className="form-actions"><button className="btn" disabled={busy || !f.smtp_host || !to} onClick={() => run(true)}><Icon name="send" size={14} /> Save & send test</button></div>
+          <p className="small muted">The link's password is never put in an email. Encrypted links pass through this server once, with their key, only to write the email.</p>
         </div>
       </Card>
     </div>

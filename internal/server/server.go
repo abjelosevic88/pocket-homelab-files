@@ -100,6 +100,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 		}
 		s.log.Info("admin user created from environment", "email", u.Email)
 	}
+	s.seedOwnerSMTP(ctx)
 	if s.cfg.DemoData {
 		if err := s.seedDemo(ctx); err != nil {
 			return err
@@ -271,6 +272,9 @@ func (s *Server) Router() http.Handler {
 				r.Put("/settings", s.handlePutSettings)
 				r.Get("/settings/system", s.handleSystemInfo)
 				r.Post("/notify/test", s.handleTestNotify)
+				r.Post("/email/test", s.handleTestEmail)
+				r.Post("/sends/{id}/email", s.handleEmailSend)
+				r.Post("/requests/{id}/email", s.handleEmailRequest)
 
 				r.Get("/tokens", s.handleListTokens)
 				r.Post("/tokens", s.handleCreateToken)

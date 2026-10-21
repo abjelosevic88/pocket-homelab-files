@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { api, rawURL, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { bytes } from '../lib/format'
-import { createSend, type SendOptions } from '../lib/sends'
+import { createSend, emailSend, type SendOptions } from '../lib/sends'
+import { EmailLink } from './EmailLink'
 import type { Access, Entry, Person, Perm, Send, Share } from '../lib/types'
 import { Avatar } from './people'
 import { Icon } from './icons'
@@ -96,6 +97,8 @@ function LinkShare({ space, entries, onClose }: { space: string; entries: Entry[
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<[number, number] | null>(null)
   const [link, setLink] = useState('')
+  const [sendId, setSendId] = useState('')
+  const [emailed, setEmailed] = useState<string[]>([])
   const [abort] = useState(() => new AbortController())
 
   const create = async () => {
@@ -110,10 +113,12 @@ function LinkShare({ space, entries, onClose }: { space: string; entries: Entry[
           items.push({ file: await res.blob(), name: f.name, type: f.mime })
         }
         const r = await createSend(items, { ...opt, label: opt.label || (files.length === 1 ? files[0].name : `${files[0].name} and ${files.length - 1} more`) }, (d, t) => setProgress([d, t]), abort.signal)
-        setLink(r.link)
+        setLink(r.link); setSendId(r.send.id)
+        if (opt.email_to?.trim()) setEmailed(await emailSend(r.send.id, opt.email_to, opt.email_message || '', r.link))
       } else {
         const s = await api.post<Send>(`${V1}/sends`, { kind: 'live', live: { space, paths: entries.map(e => e.path) }, expires: opt.expires, max_downloads: opt.max_downloads, password: opt.password, notify: opt.notify, label: opt.label })
-        setLink(s.url)
+        setLink(s.url); setSendId(s.id)
+        if (opt.email_to?.trim()) setEmailed(await emailSend(s.id, opt.email_to, opt.email_message || ''))
       }
       bump()
     } catch (e) { if (!abort.signal.aborted) toast((e as Error).message, 'err') } finally { setBusy(false); setProgress(null) }
@@ -123,7 +128,9 @@ function LinkShare({ space, entries, onClose }: { space: string; entries: Entry[
     <div className="grid" style={{ gap: 12 }}>
       <div className="callout success row"><Icon name="check" size={16} /> Link ready{opt.encrypted ? ' — the key is in the link, keep it whole' : ''}.</div>
       <CopyField value={link} label="Copy link" />
+      {emailed.length > 0 && <div className="callout success small">Emailed to {emailed.join(', ')}.</div>}
       {opt.password && <p className="small muted">Send the password separately.</p>}
+      <EmailLink kind="send" id={sendId} link={link} encrypted={opt.encrypted} />
       <div className="form-actions"><a className="btn" href="/send">All my links</a><button className="btn primary" onClick={onClose}>Done</button></div>
     </div>
   )
@@ -135,7 +142,7 @@ function LinkShare({ space, entries, onClose }: { space: string; entries: Entry[
       {progress && <Progress value={progress[0]} total={progress[1]} label="Encrypting and uploading…" />}
       <div className="form-actions">
         <button className="btn" onClick={() => { abort.abort(); onClose() }}>Cancel</button>
-        <button className="btn primary" disabled={busy} onClick={create}><Icon name="link" size={15} /> Create link</button>
+        <button className="btn primary" disabled={busy} onClick={create}><Icon name={opt.email_to?.trim() ? 'send' : 'link'} size={15} /> {opt.email_to?.trim() ? 'Create & email' : 'Create link'}</button>
       </div>
     </div>
   )

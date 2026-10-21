@@ -12,6 +12,7 @@ func defaults() Settings {
 	return Settings{
 		Title: DefaultTitle, View: "list", Sort: "name", NotifyKind: "apprise",
 		NotifySends: true, NotifyUploads: true, SendExpiry: "7d", SendDownloads: 0, SendEncrypted: true, TrashDays: 30,
+		SMTPPort: 587, SMTPTLS: "starttls",
 	}
 }
 
@@ -74,6 +75,26 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 			}
 		case "send_encrypted":
 			st.SendEncrypted = v != "0"
+		case "smtp_host":
+			st.SMTPHost = v
+		case "smtp_port":
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				st.SMTPPort = n
+			}
+		case "smtp_user":
+			st.SMTPUser = v
+		case "smtp_password":
+			st.SMTPPassword = v
+			st.SMTPPasswordSet = v != ""
+		case "smtp_from":
+			st.SMTPFrom = v
+		case "smtp_from_name":
+			st.SMTPFromName = v
+		case "smtp_tls":
+			switch v {
+			case "none", "starttls", "tls":
+				st.SMTPTLS = v
+			}
 		case "trash_days":
 			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
 				st.TrashDays = n
@@ -101,6 +122,8 @@ func (s *Store) SaveUserSettings(ctx context.Context, userID int64, st Settings)
 		"notify_sends": b01(st.NotifySends), "notify_uploads": b01(st.NotifyUploads),
 		"send_expiry": st.SendExpiry, "send_downloads": strconv.Itoa(st.SendDownloads), "send_encrypted": b01(st.SendEncrypted),
 		"trash_days": strconv.Itoa(st.TrashDays),
+		"smtp_host":  st.SMTPHost, "smtp_port": strconv.Itoa(st.SMTPPort), "smtp_user": st.SMTPUser, "smtp_password": st.SMTPPassword,
+		"smtp_from": st.SMTPFrom, "smtp_from_name": st.SMTPFromName, "smtp_tls": st.SMTPTLS,
 	} {
 		if err := s.SetUserSetting(ctx, userID, k, v); err != nil {
 			return err

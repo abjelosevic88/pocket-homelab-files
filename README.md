@@ -71,6 +71,9 @@ All screenshots use the built-in demo data. [How to refresh them](docs/screensho
 - Every link: expiry (5 minutes to 30 days, or never), a download limit (one = burn after
   reading), an optional password (mixed into the key for encrypted links), a download log, and a
   notification when it is used. Extend, add downloads or kill a link at any time.
+- **Email it in one click**: set up your mail account once (Settings → Email) and every link —
+  new or existing, upload links too — goes out from your address; "Create & email" does both. The
+  password never goes in the email.
 - **Upload links (file requests)**: someone without an account drops files into a folder you
   choose — they never see what is there. Limits on file count and size, expiry, password. Files
   arrive in pieces, so links work through Cloudflare's 100 MB request cap.

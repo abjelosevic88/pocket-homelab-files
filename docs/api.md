@@ -50,6 +50,7 @@ Places are *spaces*: `home` (your files), `mount:<id>`, `share:<id>`. Paths insi
 | `POST /sends/{id}/finish` | Ready when every file has its announced size |
 | `PUT /sends/{id}` `{label, expires (or "now"), max_downloads, notify}` | Change limits |
 | `DELETE /sends/{id}` | Kill it |
+| `POST /sends/{id}/email` `{to: ["a@x, b@y"], message, link}` | Email it from your mail account; encrypted links need `link` (the whole link with its key, used once, never stored) |
 
 Public (no sign-in; also on `PUBLIC_PORT`): `GET /public/sends/{id}`, `POST /public/sends/{id}/open`
 `{auth}` or `{password}` → `{ticket, …}`, `GET /public/sends/{id}/files/{idx}?t=`, live links
@@ -60,6 +61,7 @@ Public (no sign-in; also on `PUBLIC_PORT`): `GET /public/sends/{id}`, `POST /pub
 | Call | What |
 | :--- | :--- |
 | `GET /requests` · `POST /requests` · `PUT /requests/{id}` · `DELETE /requests/{id}` | `{title, message, space, path, expires, max_files, max_file_mb, password, notify, closed}` |
+| `POST /requests/{id}/email` `{to, message}` | Email the upload link |
 
 Public: `GET /public/requests/{id}` (→ `token` unless a password is set), `POST …/unlock {password}`,
 `POST …/uploads {token, name, size, from}` → `{id}`, `PUT …/uploads/{uid}?offset=&token=` (pieces of up
@@ -69,7 +71,7 @@ to `PUBLIC_CHUNK_MB`), `POST …/uploads/{uid}/finish {token}`.
 
 `GET /auth/status`, `POST /auth/login`, `POST /auth/setup`, `POST /auth/logout`, `GET|PUT /auth/me`,
 `GET|POST /tokens`, `DELETE /tokens/{id}`, `GET|PUT /settings`, `GET /settings/system`,
-`POST /notify/test`, `GET|POST /users`, `PUT|DELETE /users/{id}` (admins), `GET /backup` (admins,
+`POST /notify/test`, `POST /email/test {to}`, `GET|POST /users`, `PUT|DELETE /users/{id}` (admins), `GET /backup` (admins,
 single-person boxes), `GET /changes` (a stamp that moves on every change).
 
 `GET /healthz`, `GET /readyz`, `GET /metrics`.

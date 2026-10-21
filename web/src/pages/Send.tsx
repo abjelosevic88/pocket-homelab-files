@@ -2,7 +2,8 @@ import { useRef, useState } from 'react'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { ago, bytes, plural, stamp } from '../lib/format'
-import { createSend, forgetLink, knownLink, type Item, type SendOptions } from '../lib/sends'
+import { createSend, emailSend, forgetLink, knownLink, type Item, type SendOptions } from '../lib/sends'
+import { EmailLink } from '../components/EmailLink'
 import type { NoteFormat } from '../lib/crypto'
 import type { Send } from '../lib/types'
 import { filesFromDrop, filesFromInput } from '../lib/uploads'
@@ -21,7 +22,7 @@ export default function SendPage() {
   const [opt, setOpt] = useState<SendOptions>(() => defaultOptions(settings))
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<[number, number] | null>(null)
-  const [result, setResult] = useState<{ link: string; password: boolean } | null>(null)
+  const [result, setResult] = useState<{ link: string; password: boolean; id: string; encrypted: boolean; emailed: string[]; emailError?: string } | null>(null)
   const [drag, setDrag] = useState(false)
   const abort = useRef<AbortController | null>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -43,8 +44,12 @@ export default function SendPage() {
         if (!items.length) return
         r = await createSend(items, { ...opt, label: opt.label || (items.length === 1 ? items[0].name : `${items[0].name.split('/')[0]} and ${items.length - 1} more`) }, (d, t) => setProgress([d, t]), abort.current.signal)
       }
-      setResult({ link: r.link, password: !!opt.password })
-      setItems([]); setNote(''); setOpt(o => ({ ...o, password: '', label: '' }))
+      let emailed: string[] = [], emailError = ''
+      if (opt.email_to?.trim()) {
+        try { emailed = await emailSend(r.send.id, opt.email_to, opt.email_message || '', r.link) } catch (e) { emailError = (e as Error).message }
+      }
+      setResult({ link: r.link, password: !!opt.password, id: r.send.id, encrypted: r.send.encrypted, emailed, emailError })
+      setItems([]); setNote(''); setOpt(o => ({ ...o, password: '', label: '', email_to: '', email_message: '' }))
       bump()
     } catch (e) { if (!abort.current?.signal.aborted) toast((e as Error).message, 'err') } finally { setBusy(false); setProgress(null) }
   }
@@ -78,7 +83,7 @@ export default function SendPage() {
           {progress && <Progress value={progress[0]} total={progress[1]} label={opt.encrypted ? 'Encrypting and uploading…' : 'Uploading…'} />}
           <div className="form-actions">
             {busy && <button className="btn" onClick={() => abort.current?.abort()}>Cancel</button>}
-            <button className="btn primary lg" disabled={busy || (mode === 'files' ? !items.length : !note.trim())} onClick={go}><Icon name="link" size={16} /> {busy ? 'Working…' : 'Create link'}</button>
+            <button className="btn primary lg" disabled={busy || (mode === 'files' ? !items.length : !note.trim())} onClick={go}><Icon name={opt.email_to?.trim() ? 'send' : 'link'} size={16} /> {busy ? 'Working…' : opt.email_to?.trim() ? 'Create & email' : 'Create link'}</button>
           </div>
         </Card>
         <div className="send-side">
@@ -90,7 +95,10 @@ export default function SendPage() {
       {result && <Modal title="Your link is ready" onClose={() => setResult(null)}>
         <div className="grid" style={{ gap: 12 }}>
           <CopyField value={result.link} label="Copy link" />
+          {result.emailed.length > 0 && <div className="callout success small">Emailed to {result.emailed.join(', ')}.</div>}
+          {result.emailError && <div className="callout danger small">Not emailed: {result.emailError}</div>}
           <p className="small muted">{result.link.includes('#') ? 'The part after # is the key: whoever has the whole link can open it, this server cannot.' : 'Anyone with this link can download until it expires.'}{result.password && ' Send the password another way.'}</p>
+          <EmailLink kind="send" id={result.id} link={result.link} encrypted={result.encrypted} />
           <div className="form-actions"><button className="btn primary" onClick={() => setResult(null)}>Done</button></div>
         </div>
       </Modal>}
@@ -102,6 +110,7 @@ function LinkRow({ s, onChanged }: { s: Send; onChanged: () => void }) {
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [del, setDel] = useState(false)
+  const [mail, setMail] = useState(false)
   const link = knownLink(s)
   const kindIcon = s.kind === 'note' ? 'note' : s.kind === 'live' ? 'folder' : 'file'
   const left = s.max_downloads ? `${s.downloads}/${s.max_downloads} downloads` : `${plural(s.downloads, 'download')}`
@@ -118,11 +127,13 @@ function LinkRow({ s, onChanged }: { s: Send; onChanged: () => void }) {
         <div className="small muted">{s.kind !== 'note' && s.total_size > 0 && <>{bytes(s.total_size)} · </>}{left} · {s.expires_at ? <span title={stamp(s.expires_at)}>{new Date(s.expires_at) < new Date() ? 'expired ' + ago(s.expires_at) : 'expires ' + new Date(s.expires_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span> : 'never expires'}</div>
       </div>
       <div className="row">
+        {link && s.available && <button className="btn sm" onClick={() => setMail(true)} title="Email this link"><Icon name="send" size={13} /> Email</button>}
         {link ? <button className="btn sm" onClick={() => copyText(link).then(() => toast('Link copied'))}><Icon name="copy" size={13} /> Copy</button>
           : <span className="small muted" title="The key of an encrypted link lives only in the browser that made it">key elsewhere</span>}
         <button className="icon-btn" title="Delete" onClick={() => setDel(true)}><Icon name="trash" size={15} /></button>
       </div>
       {open && <LinkDetails id={s.id} onClose={() => { setOpen(false); onChanged() }} />}
+      {mail && link && <Modal title={`Email “${s.label || 'link'}”`} onClose={() => setMail(false)}><EmailLink kind="send" id={s.id} link={link} encrypted={s.encrypted} onSent={() => setTimeout(() => setMail(false), 900)} /></Modal>}
       {del && <Confirm title="Delete this link?" message="It stops working right away; uploaded copies are removed from the server." onCancel={() => setDel(false)} onConfirm={async () => { await api.del(`${V1}/sends/${s.id}`); forgetLink(s.id); setDel(false); onChanged() }} />}
     </div>
   )
@@ -138,6 +149,7 @@ function LinkDetails({ id, onClose }: { id: string; onClose: () => void }) {
     <Modal title={data.label || 'Link'} onClose={onClose}>
       <div className="grid" style={{ gap: 12 }}>
         {link ? <CopyField value={link} label="Copy" /> : <div className="callout small">This link is end-to-end encrypted and its key was made in another browser — copy it from there.</div>}
+        {link && data.available && <EmailLink kind="send" id={data.id} link={link} encrypted={data.encrypted} />}
         <div className="kv"><span>Downloads</span><b>{data.downloads}{data.max_downloads ? ` of ${data.max_downloads}` : ''}</b>
           <span>Expires</span><b>{data.expires_at ? stamp(data.expires_at) : 'never'}</b>
           <span>Size</span><b>{bytes(data.total_size)} · {plural(data.file_count, data.kind === 'live' ? 'item' : 'file')}</b>

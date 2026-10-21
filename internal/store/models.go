@@ -176,4 +176,14 @@ type Settings struct {
 	SendDownloads int    `json:"send_downloads"` // default download limit (0 = unlimited)
 	SendEncrypted bool   `json:"send_encrypted"` // default for new sends
 	TrashDays     int    `json:"trash_days"`
+
+	// Email for sending links (the person's own SMTP account).
+	SMTPHost        string `json:"smtp_host"`
+	SMTPPort        int    `json:"smtp_port"`
+	SMTPUser        string `json:"smtp_user"`
+	SMTPPassword    string `json:"smtp_password"`
+	SMTPPasswordSet bool   `json:"smtp_password_set"`
+	SMTPFrom        string `json:"smtp_from"`
+	SMTPFromName    string `json:"smtp_from_name"`
+	SMTPTLS         string `json:"smtp_tls"` // none | starttls | tls
 }

@@ -3,7 +3,7 @@ import { b64url, cipherSize, deriveKeys, encryptBlob, randomBytes, sealMeta, sha
 import type { PublicSend, Send } from './types'
 import { Crc32, buildZip, saveBlob, type ZipItem } from './zip'
 
-export interface SendOptions { expires: string; max_downloads: number; password: string; encrypted: boolean; notify: boolean; label: string }
+export interface SendOptions { expires: string; max_downloads: number; password: string; encrypted: boolean; notify: boolean; label: string; email_to?: string; email_message?: string }
 
 export interface Item { file: Blob; name: string; type: string }
 
@@ -156,3 +156,25 @@ export const EXPIRY_OPTIONS = [
   { value: '7d', label: '7 days' }, { value: '30d', label: '30 days' }, { value: 'never', label: 'Never' },
 ]
 export const DOWNLOAD_OPTIONS = [1, 2, 3, 5, 10, 20, 50, 100, 0]
+
+// ---------- email ----------
+
+const RECIPIENTS = 'pf-recipients'
+export function recentRecipients(): string[] { return JSON.parse(localStorage.getItem(RECIPIENTS) || '[]') }
+function remember(to: string[]) {
+  const all = [...to, ...recentRecipients().filter(x => !to.includes(x))].slice(0, 30)
+  localStorage.setItem(RECIPIENTS, JSON.stringify(all))
+}
+
+/** Emails a link (the whole link, key included, for encrypted ones). */
+export async function emailSend(id: string, to: string, message = '', link = ''): Promise<string[]> {
+  const r = await api.post<{ to: string[] }>(`${V1}/sends/${id}/email`, { to: [to], message, link })
+  remember(r.to)
+  return r.to
+}
+
+export async function emailRequest(id: string, to: string, message = ''): Promise<string[]> {
+  const r = await api.post<{ to: string[] }>(`${V1}/requests/${id}/email`, { to: [to], message })
+  remember(r.to)
+  return r.to
+}

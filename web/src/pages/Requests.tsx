@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { api, filesRoute, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { ago, bytes, plural, stamp } from '../lib/format'
-import { EXPIRY_OPTIONS } from '../lib/sends'
+import { EXPIRY_OPTIONS, emailRequest } from '../lib/sends'
+import { EmailLink, EmailSetupHint, RecipientList } from '../components/EmailLink'
 import type { Request } from '../lib/types'
 import { Icon } from '../components/icons'
 import { FolderPicker } from '../components/FolderPicker'
@@ -16,6 +17,7 @@ export default function Requests() {
   const [create, setCreate] = useState(false)
   const [edit, setEdit] = useState<Request | null>(null)
   const [del, setDel] = useState<Request | null>(null)
+  const [mail, setMail] = useState<Request | null>(null)
   const { toast } = useToast()
   return (
     <div className="page">
@@ -36,6 +38,7 @@ export default function Requests() {
               </div>
             </div>
             <div className="row">
+              {r.open && <button className="btn sm" onClick={() => setMail(r)}><Icon name="send" size={13} /> Email</button>}
               <button className="btn sm" onClick={() => copyText(r.url).then(() => toast('Link copied'))}><Icon name="copy" size={13} /> Copy</button>
               <button className="icon-btn" title="Edit" onClick={() => setEdit(r)}><Icon name="edit" size={15} /></button>
               <button className="icon-btn" title="Delete" onClick={() => setDel(r)}><Icon name="trash" size={15} /></button>
@@ -45,13 +48,16 @@ export default function Requests() {
       </div>
       {create && <RequestDialog onClose={() => setCreate(false)} />}
       {edit && <RequestDialog existing={edit} onClose={() => setEdit(null)} />}
+      {mail && <Modal title={`Email “${mail.title}”`} onClose={() => setMail(null)}><EmailLink kind="request" id={mail.id} onSent={() => setTimeout(() => setMail(null), 900)} /></Modal>}
       {del && <Confirm title="Delete this upload link?" message="The link stops working. Files already received stay where they are." onCancel={() => setDel(null)} onConfirm={async () => { await api.del(`${V1}/requests/${del.id}`); setDel(null); bump() }} />}
     </div>
   )
 }
 
 export function RequestDialog({ space: s0 = 'home', path: p0 = '/', folderName, existing, onClose }: { space?: string; path?: string; folderName?: string; existing?: Request; onClose: () => void }) {
-  const { spaces, bump } = useApp()
+  const { spaces, bump, settings } = useApp()
+  const [emailTo, setEmailTo] = useState('')
+  const [emailed, setEmailed] = useState<string[]>([])
   const { toast } = useToast()
   const [form, setForm] = useState({
     title: existing?.title || (folderName ? `Files for ${folderName}` : 'Send me files'), message: existing?.message || '',
@@ -68,7 +74,10 @@ export function RequestDialog({ space: s0 = 'home', path: p0 = '/', folderName, 
     try {
       const r = existing ? await api.put<Request>(`${V1}/requests/${existing.id}`, form) : await api.post<Request>(`${V1}/requests`, form)
       bump()
-      if (existing) { toast('Saved'); onClose() } else setDone(r)
+      if (existing) { toast('Saved'); onClose() } else {
+        if (emailTo.trim()) { try { setEmailed(await emailRequest(r.id, emailTo)) } catch (e) { toast('Not emailed: ' + (e as Error).message, 'err') } }
+        setDone(r)
+      }
     } catch (e) { toast((e as Error).message, 'err') } finally { setBusy(false) }
   }
   if (done) return (
@@ -76,6 +85,8 @@ export function RequestDialog({ space: s0 = 'home', path: p0 = '/', folderName, 
       <div className="grid" style={{ gap: 12 }}>
         <p className="muted">Whoever opens it can upload into <b>{spaceName}{done.path === '/' ? '' : done.path}</b>.</p>
         <CopyField value={done.url} label="Copy link" />
+        {emailed.length > 0 && <div className="callout success small">Emailed to {emailed.join(', ')}.</div>}
+        <EmailLink kind="request" id={done.id} />
         <div className="form-actions"><button className="btn primary" onClick={onClose}>Done</button></div>
       </div>
     </Modal>
@@ -95,7 +106,8 @@ export function RequestDialog({ space: s0 = 'home', path: p0 = '/', folderName, 
         {existing?.has_password && <Switch checked={form.remove_password} onChange={v => set('remove_password', v)} label="Remove the password" />}
         <Switch checked={form.notify} onChange={v => set('notify', v)} label="Tell me when files arrive" />
         {existing && <Switch checked={form.closed} onChange={v => set('closed', v)} label="Closed (stop taking files)" />}
-        <div className="form-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy} onClick={save}>{existing ? 'Save' : 'Create link'}</button></div>
+        {!existing && (settings?.smtp_host ? <><Field label="Email the link to (optional)"><input type="text" inputMode="email" list="rcpt-req" value={emailTo} onChange={e => setEmailTo(e.target.value)} placeholder="name@example.com" /></Field><RecipientList id="rcpt-req" /></> : <EmailSetupHint />)}
+        <div className="form-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy} onClick={save}>{existing ? 'Save' : emailTo.trim() ? 'Create & email' : 'Create link'}</button></div>
       </div>
       {pick && <FolderPicker title="Where should the files go?" button="Use this folder" startSpace={form.space} startPath={form.path} onClose={() => setPick(false)} onPick={(sp, p) => { setForm(f => ({ ...f, space: sp, path: p })); setPick(false) }} />}
     </Modal>

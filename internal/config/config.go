@@ -58,6 +58,10 @@ type Config struct {
 	NotifyURL  string
 	NotifyKind string // apprise | ntfy | webhook
 
+	// SMTP for the owner, seeded once into their email settings.
+	SMTPHost, SMTPUser, SMTPPassword, SMTPFrom, SMTPFromName, SMTPTLS string
+	SMTPPort                                                          int
+
 	MaxSendMB      int64 // per send, all files together (0 = no limit)
 	MaxSendDays    int   // longest expiry a send may have (0 = "never" allowed)
 	MaxRequestMB   int64 // per file uploaded through a request link (0 = no limit)
@@ -143,6 +147,14 @@ func Load() (*Config, error) {
 
 		NotifyURL:  env("NOTIFY_URL", ""),
 		NotifyKind: strings.ToLower(env("NOTIFY_KIND", "apprise")),
+
+		SMTPHost:     env("SMTP_HOST", ""),
+		SMTPPort:     envInt("SMTP_PORT", 587),
+		SMTPUser:     env("SMTP_USER", ""),
+		SMTPPassword: env("SMTP_PASSWORD", ""),
+		SMTPFrom:     env("SMTP_FROM", ""),
+		SMTPFromName: env("SMTP_FROM_NAME", ""),
+		SMTPTLS:      strings.ToLower(env("SMTP_TLS", "starttls")),
 
 		MaxSendMB:      int64(envInt("MAX_SEND_MB", 10240)),
 		MaxSendDays:    envInt("MAX_SEND_DAYS", 0),

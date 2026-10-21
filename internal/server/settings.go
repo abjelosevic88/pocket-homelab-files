@@ -22,6 +22,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	if st.NotifyToken != "" {
 		st.NotifyToken = "••••••"
 	}
+	st.SMTPPassword = "" // write-only
 	writeJSON(w, http.StatusOK, st)
 }
 
@@ -40,6 +41,10 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if in.NotifyToken == "••••••" {
 		in.NotifyToken = cur.NotifyToken
 	}
+	if in.SMTPPassword == "" {
+		in.SMTPPassword = cur.SMTPPassword // never echoed back, so empty means keep
+	}
+	in.SMTPHost, in.SMTPFrom, in.SMTPUser = strings.TrimSpace(in.SMTPHost), strings.TrimSpace(in.SMTPFrom), strings.TrimSpace(in.SMTPUser)
 	switch in.NotifyKind {
 	case "apprise", "ntfy", "webhook":
 	default:

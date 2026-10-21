@@ -63,6 +63,16 @@ Without `CORE_URL` nothing of Core is used.
 | :--- | :--- |
 | `NOTIFY_URL` / `NOTIFY_KIND` | The owner's default channel (`apprise`, `ntfy`, `webhook`); everyone can set their own in Settings |
 
+## Email
+
+Everyone sets their own mail account in Settings → Email. These seed the owner's once:
+
+| Variable | Default | What |
+| :--- | :--- | :--- |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` | — / `587` / `starttls` | `starttls`, `tls` (465) or `none` |
+| `SMTP_USER` / `SMTP_PASSWORD` | — | Login (Gmail: an app password) |
+| `SMTP_FROM` / `SMTP_FROM_NAME` | — | Sender |
+
 ## Command line
 
 ```

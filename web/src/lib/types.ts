@@ -44,6 +44,7 @@ export interface Settings {
   show_hidden: boolean; view: 'list' | 'grid'; sort: 'name' | 'modified' | 'size' | 'type'; sort_desc: boolean; timezone: string
   notify_kind: 'apprise' | 'ntfy' | 'webhook'; notify_url: string; notify_token?: string; notify_sends: boolean; notify_uploads: boolean
   send_expiry: string; send_downloads: number; send_encrypted: boolean; trash_days: number
+  smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_password_set: boolean; smtp_from: string; smtp_from_name: string; smtp_tls: 'none' | 'starttls' | 'tls'
 }
 
 export interface APIToken { id: number; name: string; prefix: string; last_used_at: string | null; created_at: string }
