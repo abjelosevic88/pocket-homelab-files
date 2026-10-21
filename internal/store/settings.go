@@ -95,6 +95,14 @@ func (s *Store) GetSettings(ctx context.Context, userID int64) (Settings, error)
 			case "none", "starttls", "tls":
 				st.SMTPTLS = v
 			}
+		case "mail_subject":
+			st.MailSubject = v
+		case "mail_body":
+			st.MailBody = v
+		case "mail_request_subject":
+			st.MailRequestSubject = v
+		case "mail_request_body":
+			st.MailRequestBody = v
 		case "trash_days":
 			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
 				st.TrashDays = n
@@ -124,6 +132,7 @@ func (s *Store) SaveUserSettings(ctx context.Context, userID int64, st Settings)
 		"trash_days": strconv.Itoa(st.TrashDays),
 		"smtp_host":  st.SMTPHost, "smtp_port": strconv.Itoa(st.SMTPPort), "smtp_user": st.SMTPUser, "smtp_password": st.SMTPPassword,
 		"smtp_from": st.SMTPFrom, "smtp_from_name": st.SMTPFromName, "smtp_tls": st.SMTPTLS,
+		"mail_subject": st.MailSubject, "mail_body": st.MailBody, "mail_request_subject": st.MailRequestSubject, "mail_request_body": st.MailRequestBody,
 	} {
 		if err := s.SetUserSetting(ctx, userID, k, v); err != nil {
 			return err

@@ -58,11 +58,17 @@ export default function Browser() {
       const d = await api.get<Listing>(`${V1}/fs/list${qs({ space, path })}`)
       if (!d.entry.is_dir) { navigate(filesRoute(space, d.path.split('/').slice(0, -1).join('/') || '/') + `?open=${encodeURIComponent(d.entry.name)}`, { replace: true }); return }
       setData(d); setErr('')
-    } catch (e) { setErr((e as Error).message); setData(null) }
+    } catch (e) {
+      const offline = (e as { status?: number }).status === 0 || e instanceof TypeError
+      setErr(offline ? 'Cannot reach the server right now — trying again…' : (e as Error).message)
+      if (!offline) setData(null)
+      if (offline) setTimeout(() => setRetry(n => n + 1), 3000)
+    }
   }, [space, path, navigate])
 
   useEffect(() => { setData(null); setSel(new Set()); setFilter(''); setPreview(null) }, [space, path])
-  useEffect(() => { load() }, [load, version])
+  const [retry, setRetry] = useState(0)
+  useEffect(() => { load() }, [load, version, retry])
   useEffect(() => onDone(() => load()), [onDone, load])
 
   // deep search (?q=)
@@ -203,8 +209,7 @@ export default function Browser() {
       {one && !one.is_dir && previewKind(one) !== 'none' && inMenu && <B icon="eye" label="Open" on={() => open(one)} />}
       {one?.is_dir && inMenu && <B icon="folder" label="Open" on={() => open(one)} />}
       <B icon="download" label={one && !one.is_dir ? 'Download' : 'Download as zip'} on={() => download(list)} />
-      <B icon="link" label="Get a link" on={() => setDialog({ kind: 'share', entries: list, tab: 'link' })} />
-      {space === 'home' && one && <B icon="users" label="Share with people" on={() => setDialog({ kind: 'share', entries: list, tab: 'people' })} />}
+      <B icon="send" label="Share…" on={() => setDialog({ kind: 'share', entries: list })} />
       {one && <B icon="star" label={one.starred ? 'Remove star' : 'Star'} on={() => star(one)} />}
       <hr />
       {writable && one && <B icon="edit" label="Rename" on={() => setDialog({ kind: 'rename', entry: one })} />}
@@ -262,7 +267,7 @@ export default function Browser() {
         <b>{sel.size} selected</b>
         <span className="spacer" />
         <button className="btn sm" onClick={() => download(selected)}><Icon name="download" size={14} /> Download</button>
-        <button className="btn sm" onClick={() => setDialog({ kind: 'share', entries: selected, tab: 'link' })}><Icon name="link" size={14} /> Link</button>
+        <button className="btn sm" onClick={() => setDialog({ kind: 'share', entries: selected })}><Icon name="send" size={14} /> Share</button>
         {writable && <button className="btn sm" onClick={() => setDialog({ kind: 'move', entries: selected })}><Icon name="move" size={14} /> Move</button>}
         {writable && <button className="btn sm danger-text" onClick={() => setDialog({ kind: 'delete', entries: selected })}><Icon name="trash" size={14} /> Delete</button>}
       </div>}
@@ -343,7 +348,7 @@ export default function Browser() {
       {preview !== null && files[preview] && <Preview space={space} entries={files} index={preview} writable={writable} onClose={() => setPreview(null)} onIndex={setPreview} onSaved={load}
         actions={e => <>
           <button className="icon-btn" onClick={() => star(e)} title={e.starred ? 'Remove star' : 'Star'}><Icon name="star" size={16} fill={e.starred} className={e.starred ? 'star-on' : ''} /></button>
-          <button className="icon-btn" onClick={() => setDialog({ kind: 'share', entries: [e], tab: 'link' })} title="Get a link"><Icon name="link" size={16} /></button>
+          <button className="icon-btn" onClick={() => setDialog({ kind: 'share', entries: [e] })} title="Share"><Icon name="send" size={16} /></button>
         </>} />}
 
       {dialog?.kind === 'mkdir' && <Prompt title="New folder" placeholder="Folder name" button="Create" onClose={() => setDialog(null)} onDone={async name => {

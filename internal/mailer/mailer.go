@@ -38,6 +38,7 @@ type Message struct {
 	To          []string
 	Subject     string
 	Body        string
+	HTML        string // optional; sent as multipart/alternative next to Body
 	Attachments []Attachment
 }
 
@@ -128,6 +129,13 @@ func build(from string, m Message) []byte {
 	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", m.Subject))
 	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
 	fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")
+	if len(m.Attachments) == 0 && m.HTML != "" {
+		fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=%q\r\n\r\n", boundary)
+		fmt.Fprintf(&b, "--%s\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n%s\r\n", boundary, m.Body)
+		fmt.Fprintf(&b, "--%s\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n%s\r\n", boundary, m.HTML)
+		fmt.Fprintf(&b, "--%s--\r\n", boundary)
+		return b.Bytes()
+	}
 	if len(m.Attachments) == 0 {
 		fmt.Fprintf(&b, "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n%s\r\n", m.Body)
 		return b.Bytes()

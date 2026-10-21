@@ -567,3 +567,14 @@ input.toggle:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 .page > .modal-backdrop, .page > .viewer, .page > .drop-overlay, .page > .ctx-scrim, .page > .ctx-menu { max-width: none; }
 .email-box { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--hairline); }
 .email-box .row input { min-width: 0; }
+.span-2 { grid-column: 1 / -1; }
+.tpl-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.tpl-body { font-family: var(--mono); font-size: 13px; min-height: 280px; }
+.tpl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tpl-chips .chip { font-family: var(--mono); font-size: 12px; }
+.tpl-preview { display: flex; flex-direction: column; gap: 6px; min-height: 420px; }
+.tpl-subject { padding: 8px 10px; background: var(--surface-2); border-radius: 8px; }
+.tpl-preview iframe { flex: 1; width: 100%; min-height: 380px; border: 1px solid var(--border); border-radius: 10px; background: #f4f6f8; }
+@media (max-width: 1100px) { .tpl-grid { grid-template-columns: 1fr; } }
+.share-opts { display: inline-flex; align-items: center; gap: 4px; }
+.share-opts .icon { display: inline-block; color: var(--muted); }

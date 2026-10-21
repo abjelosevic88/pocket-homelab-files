@@ -12,7 +12,7 @@ export function defaultOptions(s: ReturnType<typeof useApp>['settings']): SendOp
 export const downloadsLabel = (n: number) => n === 0 ? 'No limit' : n === 1 ? '1 download' : `${n} downloads`
 
 /** Expiry, download limit, password and encryption — the knobs of a link. */
-export function SendOptionsForm({ value, onChange, allowEncrypt = true, encryptHelp, showLabel = true }: { value: SendOptions; onChange: (v: SendOptions) => void; allowEncrypt?: boolean; encryptHelp?: string; showLabel?: boolean }) {
+export function SendOptionsForm({ value, onChange, allowEncrypt = true, encryptHelp, showLabel = true, hideEmail = false }: { value: SendOptions; onChange: (v: SendOptions) => void; allowEncrypt?: boolean; encryptHelp?: string; showLabel?: boolean; hideEmail?: boolean }) {
   const [showPw, setShowPw] = useState(false)
   const { settings } = useApp()
   const set = <K extends keyof SendOptions>(k: K, v: SendOptions[K]) => onChange({ ...value, [k]: v })
@@ -32,7 +32,7 @@ export function SendOptionsForm({ value, onChange, allowEncrypt = true, encryptH
       {allowEncrypt && <Switch checked={value.encrypted} onChange={v => set('encrypted', v)} label={<><Icon name="shield" size={14} style={{ display: 'inline', verticalAlign: '-2px', color: 'var(--accent)' }} /> End-to-end encrypted</>} help={encryptHelp || 'Encrypted in this browser; the key travels only in the link (after #). The server stores ciphertext.'} />}
       <Switch checked={value.notify} onChange={v => set('notify', v)} label="Tell me when it is downloaded" />
       {showLabel && <Field label="Name for your list (optional)"><input value={value.label} onChange={e => set('label', e.target.value)} placeholder="e.g. Contract for Marko" /></Field>}
-      {settings?.smtp_host ? <>
+      {hideEmail ? null : settings?.smtp_host ? <>
         <Field label="Email the link to (optional)" help={value.email_to && value.encrypted && allowEncrypt ? 'The link with its key passes through this server once to write the email; it is not stored.' : 'Sent from your mail account as soon as the link is ready. The password is never put in the email.'}>
           <input type="text" inputMode="email" list="rcpt-new" value={value.email_to || ''} onChange={e => set('email_to', e.target.value)} placeholder="name@example.com, another@example.com" />
         </Field>

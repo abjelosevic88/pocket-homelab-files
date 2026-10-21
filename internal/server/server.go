@@ -273,6 +273,8 @@ func (s *Server) Router() http.Handler {
 				r.Get("/settings/system", s.handleSystemInfo)
 				r.Post("/notify/test", s.handleTestNotify)
 				r.Post("/email/test", s.handleTestEmail)
+				r.Get("/email/templates", s.handleMailTemplates)
+				r.Post("/email/preview", s.handleMailPreview)
 				r.Post("/sends/{id}/email", s.handleEmailSend)
 				r.Post("/requests/{id}/email", s.handleEmailRequest)
 
@@ -471,7 +473,7 @@ func (s *Server) publish(ctx context.Context, topic, subject string, uid int64, 
 		payload["user_email"] = u.Email
 	}
 	payload["user_id"] = uid
-	if err := core.QueueEvent(ctx, s.store.DB, topic, subject, payload); err != nil {
+	if err := core.QueueEvent(context.WithoutCancel(ctx), s.store.DB, topic, subject, payload); err != nil {
 		s.log.Warn("pocket core: queue event", "topic", topic, "err", err)
 	}
 }

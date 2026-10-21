@@ -1,34 +1,126 @@
 import { useEffect, useState } from 'react'
 import { api, rawURL, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { bytes } from '../lib/format'
-import { createSend, emailSend, type SendOptions } from '../lib/sends'
-import { EmailLink } from './EmailLink'
+import { createSend, emailSend, EXPIRY_OPTIONS, type SendOptions } from '../lib/sends'
 import type { Access, Entry, Person, Perm, Send, Share } from '../lib/types'
 import { Avatar } from './people'
 import { Icon } from './icons'
-import { defaultOptions, SendOptionsForm } from './SendOptions'
-import { CopyField, Modal, Progress, Segmented, Select, Tabs, useToast } from './ui'
+import { EmailSetupHint, RecipientList } from './EmailLink'
+import { defaultOptions, downloadsLabel, SendOptionsForm } from './SendOptions'
+import { CopyField, Modal, Progress, Segmented, Select, copyText, useToast } from './ui'
 
 /**
- * Share files: with people on this box (folders and files of your own home),
- * or with anyone through a link (expiry, downloads, password, encryption).
+ * Share files: type an email and press Send (a link is made and mailed in
+ * one go). Copy the link instead, or share with people on this box.
  */
 export function ShareDialog({ space, entries, onClose, initialTab }: { space: string; entries: Entry[]; onClose: () => void; initialTab?: 'people' | 'link' }) {
   const canPeople = space === 'home' && entries.length === 1
-  const [tab, setTab] = useState<'people' | 'link'>(initialTab && (initialTab !== 'people' || canPeople) ? initialTab : canPeople ? 'people' : 'link')
+  const [people, setPeople] = useState(initialTab === 'people' && canPeople)
   const title = entries.length === 1 ? `Share “${entries[0].name}”` : `Share ${entries.length} items`
   return (
     <Modal title={title} onClose={onClose}>
-      {canPeople && <Tabs tabs={[{ id: 'people', label: 'People on this box' }, { id: 'link', label: 'Link for anyone' }]} value={tab} onChange={setTab} />}
-      <div className="mt">
-        {tab === 'people' && canPeople ? <PeopleShare entry={entries[0]} onClose={onClose} /> : <LinkShare space={space} entries={entries} onClose={onClose} />}
-      </div>
+      {people ? <PeopleShare entry={entries[0]} onClose={onClose} onBack={() => setPeople(false)} />
+        : <SendShare space={space} entries={entries} onClose={onClose} onPeople={canPeople ? () => setPeople(true) : undefined} />}
     </Modal>
   )
 }
 
-function PeopleShare({ entry, onClose }: { entry: Entry; onClose: () => void }) {
+function expiryLabel(v: string) {
+  const o = EXPIRY_OPTIONS.find(x => x.value === v)
+  return v === 'never' ? 'never expires' : `expires in ${o ? o.label.toLowerCase() : v}`
+}
+
+function SendShare({ space, entries, onClose, onPeople }: { space: string; entries: Entry[]; onClose: () => void; onPeople?: () => void }) {
+  const { settings, bump } = useApp()
+  const { toast } = useToast()
+  const files = entries.filter(e => !e.is_dir)
+  const canEncrypt = files.length === entries.length && files.reduce((s, f) => s + f.size, 0) < 2 * 1024 ** 3
+  // From here a link serves the files where they are (instant, works for
+  // folders); an encrypted copy is an option.
+  const [opt, setOpt] = useState<SendOptions>(() => ({ ...defaultOptions(settings), encrypted: false }))
+  const [showOpts, setShowOpts] = useState(false)
+  const [to, setTo] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState<'' | 'send' | 'copy'>('')
+  const [progress, setProgress] = useState<[number, number] | null>(null)
+  const [made, setMade] = useState<{ id: string; link: string; key: string } | null>(null)
+  const [abort] = useState(() => new AbortController())
+  const canEmail = !!settings?.smtp_host
+  const optKey = JSON.stringify(opt)
+
+  // makes the link once (again only when the options changed)
+  const makeLink = async () => {
+    if (made && made.key === optKey) return made
+    let id: string, link: string
+    if (opt.encrypted && canEncrypt) {
+      setProgress([0, 1])
+      const items = []
+      for (const f of files) {
+        const res = await fetch(rawURL(space, f.path), { credentials: 'same-origin', signal: abort.signal })
+        if (!res.ok) throw new Error(`could not read ${f.name}`)
+        items.push({ file: await res.blob(), name: f.name, type: f.mime })
+      }
+      const r = await createSend(items, { ...opt, label: opt.label || (files.length === 1 ? files[0].name : `${files[0].name} and ${files.length - 1} more`) }, (d, t) => setProgress([d, t]), abort.signal)
+      id = r.send.id; link = r.link
+    } else {
+      const label = opt.label || (entries.length === 1 ? entries[0].name : `${entries[0].name} and ${entries.length - 1} more`)
+      const s = await api.post<Send>(`${V1}/sends`, { kind: 'live', live: { space, paths: entries.map(e => e.path) }, expires: opt.expires, max_downloads: opt.max_downloads, password: opt.password, notify: opt.notify, label })
+      id = s.id; link = s.url
+    }
+    const m = { id, link, key: optKey }
+    setMade(m); bump()
+    return m
+  }
+
+  const send = async () => {
+    setBusy('send')
+    try {
+      const m = await makeLink()
+      const sent = await emailSend(m.id, to, message, m.link)
+      toast(`Sent to ${sent.join(', ')}`)
+      onClose()
+    } catch (e) { if (!abort.signal.aborted) toast((e as Error).message, 'err') } finally { setBusy(''); setProgress(null) }
+  }
+  const copy = async () => {
+    setBusy('copy')
+    try { const m = await makeLink(); await copyText(m.link); toast('Link copied') } catch (e) { if (!abort.signal.aborted) toast((e as Error).message, 'err') } finally { setBusy(''); setProgress(null) }
+  }
+
+  const summary = [expiryLabel(opt.expires), opt.max_downloads ? downloadsLabel(opt.max_downloads) : 'no download limit', opt.password ? 'password' : '', opt.encrypted && canEncrypt ? 'encrypted copy' : ''].filter(Boolean).join(' · ')
+
+  return (
+    <div className="grid" style={{ gap: 12 }}>
+      {canEmail ? (
+        <form className="grid" style={{ gap: 8 }} onSubmit={e => { e.preventDefault(); if (to.trim()) send() }}>
+          <div className="row">
+            <input autoFocus type="text" inputMode="email" list="rcpt-share" value={to} onChange={e => setTo(e.target.value)} placeholder="Email address" />
+            <button className="btn primary" disabled={!!busy || !to.trim()}><Icon name="send" size={15} /> {busy === 'send' ? 'Sending…' : 'Send'}</button>
+          </div>
+          <RecipientList id="rcpt-share" />
+          <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} placeholder="Add a message (optional)" />
+        </form>
+      ) : <EmailSetupHint />}
+
+      <button type="button" className="link-btn share-opts" onClick={() => setShowOpts(s => !s)}>
+        <Icon name={showOpts ? 'chevronDown' : 'chevronRight'} size={13} /><span className="muted small">Options: {summary}</span>
+      </button>
+      {showOpts && <SendOptionsForm value={opt} onChange={setOpt} allowEncrypt={canEncrypt} showLabel={false} hideEmail
+        encryptHelp={opt.encrypted ? 'An encrypted copy is made in this browser; later changes to the file are not in it.' : 'Off: the link serves the files where they are.'} />}
+      {opt.password && <p className="small muted">The password is not put in the email — tell them separately.</p>}
+
+      {progress && <Progress value={progress[0]} total={progress[1]} label="Encrypting and uploading…" />}
+      {made && <CopyField value={made.link} label="Copy" />}
+
+      <div className="form-actions">
+        {onPeople && <button type="button" className="btn ghost" onClick={onPeople}><Icon name="users" size={15} /> People on this box</button>}
+        <span className="spacer" />
+        <button type="button" className="btn" disabled={!!busy} onClick={copy}><Icon name="link" size={15} /> {busy === 'copy' ? 'Making link…' : 'Copy link'}</button>
+      </div>
+    </div>
+  )
+}
+
+function PeopleShare({ entry, onClose, onBack }: { entry: Entry; onClose: () => void; onBack: () => void }) {
   const { user, bump } = useApp()
   const { toast } = useToast()
   const [people, setPeople] = useState<Person[]>([])
@@ -44,13 +136,6 @@ function PeopleShare({ entry, onClose }: { entry: Entry; onClose: () => void }) 
 
   const key = (x: { user_id?: number; id?: number; email?: string }) => (x.email || '').toLowerCase() || String(x.user_id ?? x.id)
   const others = people.filter(p => p.email.toLowerCase() !== user?.email.toLowerCase() && !members.some(m => key(m) === key(p)))
-  const [typed, setTyped] = useState('')
-  const addEmail = () => {
-    const e = typed.trim().toLowerCase()
-    if (!e || members.some(m => (m.email || '').toLowerCase() === e)) return
-    const p = people.find(x => x.email.toLowerCase() === e)
-    setMembers(ms => [...ms, { user_id: p?.id || 0, name: p?.name || '', email: e, perm: 'view' }]); setTyped('')
-  }
   const save = async () => {
     setBusy(true)
     try {
@@ -60,7 +145,7 @@ function PeopleShare({ entry, onClose }: { entry: Entry; onClose: () => void }) 
   }
   return (
     <div className="grid" style={{ gap: 14 }}>
-      <p className="muted small">They see it under <b>Shared with me</b> and over WebDAV. With <b>Can edit</b> they may add, change and delete inside it; what they delete goes to your trash.</p>
+      <p className="muted small">They see it under <b>Shared with me</b> in their Pocket Files. With <b>Can edit</b> they may change it; what they delete goes to your trash.</p>
       <div className="member-list">
         {members.map(m => (
           <div key={key(m)} className="member-row">
@@ -70,79 +155,15 @@ function PeopleShare({ entry, onClose }: { entry: Entry; onClose: () => void }) 
             <button className="icon-btn" onClick={() => setMembers(ms => ms.filter(x => key(x) !== key(m)))} title="Remove"><Icon name="x" size={15} /></button>
           </div>
         ))}
-        {!members.length && <p className="muted small">Not shared with anyone yet.</p>}
+        {!members.length && <p className="muted small">Not shared with anyone here yet.</p>}
       </div>
-      {others.length > 0 && <Select value="" placeholder="Add a person…" className="btn" options={others.map(p => ({ value: p.email, label: <span className="row"><b>{p.name || p.email}</b><small className="muted">{p.name ? p.email : ''}</small></span> }))} onChange={email => { const p = people.find(x => x.email === email)!; setMembers(ms => [...ms, { user_id: p.id, name: p.name, email: p.email, perm: 'view' }]) }} />}
-      <form className="row" onSubmit={e => { e.preventDefault(); addEmail() }}>
-        <input type="email" value={typed} onChange={e => setTyped(e.target.value)} placeholder="…or type their email" />
-        <button className="btn" disabled={!typed.trim()}>Add</button>
-      </form>
-      {!others.length && !members.length && <p className="small muted">Nobody else is in this household yet. Add people in Pocket Core (or Settings → People here).</p>}
+      {others.length > 0 ? <Select value="" placeholder="Add a person…" className="btn" options={others.map(p => ({ value: p.email, label: <span className="row"><b>{p.name || p.email}</b><small className="muted">{p.name ? p.email : ''}</small></span> }))} onChange={email => { const p = people.find(x => x.email === email)!; setMembers(ms => [...ms, { user_id: p.id, name: p.name, email: p.email, perm: 'view' }]) }} />
+        : !members.length && <p className="small muted">Nobody else is in this household yet (add people in Pocket Core).</p>}
       <div className="row wrap"><span className="grow">Everyone on this box</span><Segmented size="sm" value={everyone} options={[{ value: '' as const, label: 'No' }, { value: 'view' as const, label: 'Can view' }, { value: 'edit' as const, label: 'Can edit' }]} onChange={setEveryone} /></div>
       <div className="form-actions">
-        {share?.id ? <span className="grow small muted">Shared since {new Date(share.created_at).toLocaleDateString()}</span> : <span className="grow" />}
-        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn ghost" onClick={onBack}><Icon name="chevronLeft" size={15} /> Back</button>
+        {share?.id ? <span className="grow small muted right">Shared since {new Date(share.created_at).toLocaleDateString()}</span> : <span className="grow" />}
         <button className="btn primary" disabled={busy} onClick={save}>Save</button>
-      </div>
-    </div>
-  )
-}
-
-function LinkShare({ space, entries, onClose }: { space: string; entries: Entry[]; onClose: () => void }) {
-  const { settings, bump } = useApp()
-  const { toast } = useToast()
-  const files = entries.filter(e => !e.is_dir)
-  const canEncrypt = files.length === entries.length && files.reduce((s, f) => s + f.size, 0) < 2 * 1024 ** 3
-  const [opt, setOpt] = useState<SendOptions>(() => ({ ...defaultOptions(settings), encrypted: canEncrypt && (settings?.send_encrypted ?? true) }))
-  const [busy, setBusy] = useState(false)
-  const [progress, setProgress] = useState<[number, number] | null>(null)
-  const [link, setLink] = useState('')
-  const [sendId, setSendId] = useState('')
-  const [emailed, setEmailed] = useState<string[]>([])
-  const [abort] = useState(() => new AbortController())
-
-  const create = async () => {
-    setBusy(true)
-    try {
-      if (opt.encrypted) {
-        setProgress([0, 1])
-        const items = []
-        for (const f of files) {
-          const res = await fetch(rawURL(space, f.path), { credentials: 'same-origin', signal: abort.signal })
-          if (!res.ok) throw new Error(`could not read ${f.name}`)
-          items.push({ file: await res.blob(), name: f.name, type: f.mime })
-        }
-        const r = await createSend(items, { ...opt, label: opt.label || (files.length === 1 ? files[0].name : `${files[0].name} and ${files.length - 1} more`) }, (d, t) => setProgress([d, t]), abort.signal)
-        setLink(r.link); setSendId(r.send.id)
-        if (opt.email_to?.trim()) setEmailed(await emailSend(r.send.id, opt.email_to, opt.email_message || '', r.link))
-      } else {
-        const s = await api.post<Send>(`${V1}/sends`, { kind: 'live', live: { space, paths: entries.map(e => e.path) }, expires: opt.expires, max_downloads: opt.max_downloads, password: opt.password, notify: opt.notify, label: opt.label })
-        setLink(s.url); setSendId(s.id)
-        if (opt.email_to?.trim()) setEmailed(await emailSend(s.id, opt.email_to, opt.email_message || ''))
-      }
-      bump()
-    } catch (e) { if (!abort.signal.aborted) toast((e as Error).message, 'err') } finally { setBusy(false); setProgress(null) }
-  }
-
-  if (link) return (
-    <div className="grid" style={{ gap: 12 }}>
-      <div className="callout success row"><Icon name="check" size={16} /> Link ready{opt.encrypted ? ' — the key is in the link, keep it whole' : ''}.</div>
-      <CopyField value={link} label="Copy link" />
-      {emailed.length > 0 && <div className="callout success small">Emailed to {emailed.join(', ')}.</div>}
-      {opt.password && <p className="small muted">Send the password separately.</p>}
-      <EmailLink kind="send" id={sendId} link={link} encrypted={opt.encrypted} />
-      <div className="form-actions"><a className="btn" href="/send">All my links</a><button className="btn primary" onClick={onClose}>Done</button></div>
-    </div>
-  )
-  return (
-    <div className="grid" style={{ gap: 12 }}>
-      <SendOptionsForm value={opt} onChange={setOpt} allowEncrypt={canEncrypt}
-        encryptHelp={opt.encrypted ? `An encrypted copy (${bytes(files.reduce((s, f) => s + f.size, 0))}) is made in this browser; later changes to the file are not in it.` : 'Off: the link serves the file where it is, live — changes show up, folders can be browsed and zipped.'} />
-      {!canEncrypt && <p className="small muted">Folders and very large files are shared live (not encrypted): the link serves them where they are.</p>}
-      {progress && <Progress value={progress[0]} total={progress[1]} label="Encrypting and uploading…" />}
-      <div className="form-actions">
-        <button className="btn" onClick={() => { abort.abort(); onClose() }}>Cancel</button>
-        <button className="btn primary" disabled={busy} onClick={create}><Icon name={opt.email_to?.trim() ? 'send' : 'link'} size={15} /> {opt.email_to?.trim() ? 'Create & email' : 'Create link'}</button>
       </div>
     </div>
   )

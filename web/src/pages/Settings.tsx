@@ -72,6 +72,11 @@ function Profile() {
 }
 
 function LinksAlerts() {
+  const { settings } = useApp()
+  return settings ? <LinksAlertsForm /> : <Loading />
+}
+
+function LinksAlertsForm() {
   const { settings, saveSettings } = useApp()
   const { toast } = useToast()
   const [n, setN] = useState({ notify_kind: settings?.notify_kind || 'apprise', notify_url: settings?.notify_url || '', notify_token: settings?.notify_token || '' })
@@ -103,6 +108,11 @@ function LinksAlerts() {
 }
 
 function EmailSettings() {
+  const { settings } = useApp()
+  return settings ? <EmailSettingsForm /> : <Loading />
+}
+
+function EmailSettingsForm() {
   const { settings, setSettings, user } = useApp()
   const { toast } = useToast()
   const pick = (st: S | null) => ({ smtp_host: st?.smtp_host || '', smtp_port: st?.smtp_port || 587, smtp_user: st?.smtp_user || '', smtp_password: '', smtp_from: st?.smtp_from || '', smtp_from_name: st?.smtp_from_name || '', smtp_tls: st?.smtp_tls || 'starttls' })
@@ -151,7 +161,64 @@ function EmailSettings() {
           <p className="small muted">The link's password is never put in an email. Encrypted links pass through this server once, with their key, only to write the email.</p>
         </div>
       </Card>
+      <MailTemplates />
     </div>
+  )
+}
+
+interface TplDefaults { subject: string; body: string; request_subject: string; request_body: string; placeholders: string[] }
+const PLACEHOLDER_HELP: Record<string, string> = {
+  '{sender}': 'your name', '{title}': 'what you share', '{link}': 'the link (a button in the email)', '{message}': 'your note, if any',
+  '{expires}': '“until Fri 24 Oct, 15:00”', '{limit}': 'downloads left, if limited', '{password_note}': 'says a password follows separately', '{encrypted_note}': 'keep-the-link-whole note',
+}
+
+/** The wording of the emails, with a live preview. */
+function MailTemplates() {
+  const { settings, setSettings } = useApp()
+  const { toast } = useToast()
+  const [defs, setDefs] = useState<TplDefaults | null>(null)
+  const [kind, setKind] = useState<'send' | 'request'>('send')
+  const [t, setT] = useState({ mail_subject: settings?.mail_subject || '', mail_body: settings?.mail_body || '', mail_request_subject: settings?.mail_request_subject || '', mail_request_body: settings?.mail_request_body || '' })
+  const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null)
+  useEffect(() => { api.get<TplDefaults>(`${V1}/email/templates`).then(setDefs).catch(() => {}) }, [])
+  const sk = kind === 'send' ? 'mail_subject' : 'mail_request_subject'
+  const bk = kind === 'send' ? 'mail_body' : 'mail_request_body'
+  const subject = t[sk] || (kind === 'send' ? defs?.subject : defs?.request_subject) || ''
+  const body = t[bk] || (kind === 'send' ? defs?.body : defs?.request_body) || ''
+  useEffect(() => {
+    if (!defs) return
+    const id = setTimeout(() => { api.post<{ subject: string; html: string }>(`${V1}/email/preview`, { kind, subject, body }).then(setPreview).catch(() => {}) }, 300)
+    return () => clearTimeout(id)
+  }, [kind, subject, body, defs])
+  if (!defs) return <Loading />
+  const isDefault = (k: typeof sk | typeof bk) => !t[k] || t[k] === (k === 'mail_subject' ? defs.subject : k === 'mail_body' ? defs.body : k === 'mail_request_subject' ? defs.request_subject : defs.request_body)
+  const save = async () => {
+    // a template equal to the built-in one is stored as empty, so it follows future improvements
+    const clean = Object.fromEntries(Object.entries(t).map(([k, v]) => [k, isDefault(k as typeof sk) ? '' : v]))
+    try { setSettings(await api.put<S>(`${V1}/settings`, clean)); toast('Saved') } catch (e) { toast((e as Error).message, 'err') }
+  }
+  const insert = (p: string) => setT({ ...t, [bk]: body + (body.endsWith('\n') ? '' : ' ') + p })
+  return (
+    <Card title="Email text" className="span-2">
+      <div className="tpl-grid">
+        <div className="grid" style={{ gap: 12 }}>
+          <Segmented size="sm" value={kind} onChange={setKind} options={[{ value: 'send' as const, label: 'Sharing a link' }, { value: 'request' as const, label: 'Asking for files' }]} />
+          <Field label="Subject"><input value={subject} onChange={e => setT({ ...t, [sk]: e.target.value })} /></Field>
+          <Field label="Text"><textarea className="tpl-body" value={body} onChange={e => setT({ ...t, [bk]: e.target.value })} rows={14} /></Field>
+          <div className="tpl-chips">{defs.placeholders.map(p => <button key={p} type="button" className="chip" title={PLACEHOLDER_HELP[p]} onClick={() => insert(p)}>{p}</button>)}</div>
+          <p className="small muted">Click a placeholder to add it. A line whose placeholders are empty (no message, no password) is left out.</p>
+          <div className="form-actions">
+            <button className="btn" disabled={isDefault(sk) && isDefault(bk)} onClick={() => setT({ ...t, [sk]: '', [bk]: '' })}>Reset to default</button>
+            <button className="btn primary" onClick={save}>Save</button>
+          </div>
+        </div>
+        <div className="tpl-preview">
+          <div className="small muted">Preview</div>
+          <div className="tpl-subject"><b>{preview?.subject}</b></div>
+          {preview && <iframe title="Email preview" sandbox="" srcDoc={preview.html} />}
+        </div>
+      </div>
+    </Card>
   )
 }
 

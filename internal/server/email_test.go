@@ -106,7 +106,7 @@ func TestEmailLinks(t *testing.T) {
 		t.Fatalf("email: %d %s", w.Code, w.Body.String())
 	}
 	msg := smtp.msgs[0]
-	for _, want := range []string{"Subject: Alice sent you Contract", "Sign page 3.", "https://send.example/s/" + id, "password"} {
+	for _, want := range []string{"Subject: =?utf-8?q?Alice_sent_you_", "Alice shared “Contract” with you.", "Sign page 3.", ">Open the files</a>", "https://send.example/s/" + id, "password"} {
 		if !strings.Contains(msg, want) {
 			t.Fatalf("message lacks %q:\n%s", want, msg)
 		}
@@ -145,6 +145,15 @@ func TestEmailLinks(t *testing.T) {
 	bob := newPerson(t, s, h, "bob@example.com", "member")
 	if w, _ := bob.do("POST", "/api/v1/sends/"+id+"/email", map[string]any{"to": []string{"x@example.com"}}); w.Code != 404 {
 		t.Fatalf("bob emailed alice's link: %d", w.Code)
+	}
+	// a custom template; the empty {message} line disappears
+	alice.do("PUT", "/api/v1/settings", map[string]any{"mail_subject": "Files from {sender}", "mail_body": "Hello!\n\n{message}\n\nGet them: {link}\n{password_note}\nCheers"})
+	if w, _ := alice.do("POST", "/api/v1/sends/"+id+"/email", map[string]any{"to": []string{"bob@example.com"}}); w.Code != 200 {
+		t.Fatalf("templated email: %d", w.Code)
+	}
+	last := smtp.msgs[len(smtp.msgs)-1]
+	if !strings.Contains(last, "Subject: Files from Alice") || !strings.Contains(last, "Hello!\r\n\r\nGet them: https://send.example/s/"+id+"\r\nIt needs a password") && !strings.Contains(last, "Hello!\n\nGet them: https://send.example/s/"+id+"\nIt needs a password") {
+		t.Fatalf("template not applied:\n%s", last)
 	}
 	_ = strconv.Itoa
 }

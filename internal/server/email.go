@@ -117,11 +117,12 @@ func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sent": len(to)})
 }
 
-func untilText(t string) string {
+// expiresText reads "until Fri 24 Oct 2026, 15:00" or "with no end date".
+func expiresText(t string) string {
 	if t == "" {
-		return "It does not expire."
+		return "with no end date"
 	}
-	return "It works until " + store.ParseTime(t).Local().Format("Mon 2 Jan 2006, 15:04") + "."
+	return "until " + store.ParseTime(t).Local().Format("Mon 2 Jan 2006, 15:04")
 }
 
 func (s *Server) handleEmailSend(w http.ResponseWriter, r *http.Request) {
@@ -160,34 +161,38 @@ func (s *Server) handleEmailSend(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "email")
 		return
 	}
+	st, _ := s.store.GetSettings(ctx, u.ID)
 	who := cfg.FromName
-	what := firstNonEmpty(sd.Label, "files")
-	subject := fmt.Sprintf("%s sent you %s", who, what)
-	intro := fmt.Sprintf("%s shared %s with you.", who, quoteLabel(sd.Label, "some files"))
+	vars := map[string]string{"sender": who, "title": quoteLabel(sd.Label, "some files"), "link": link, "message": strings.TrimSpace(in.Message), "expires": expiresText(sd.ExpiresAt)}
 	if sd.Kind == "note" {
-		subject, intro = fmt.Sprintf("%s sent you a note", who), fmt.Sprintf("%s sent you a note.", who)
+		vars["title"] = "a note"
 	}
-	var b strings.Builder
-	b.WriteString("Hi,\n\n" + intro + "\n\n")
-	if m := strings.TrimSpace(in.Message); m != "" {
-		b.WriteString(m + "\n\n")
+	switch {
+	case sd.MaxDownloads == 1:
+		vars["limit"] = "It opens once, then it is gone."
+	case sd.MaxDownloads > 0:
+		vars["limit"] = fmt.Sprintf("It can be downloaded %d times.", sd.MaxDownloads-sd.Downloads)
+	default:
+		vars["limit"] = ""
 	}
-	b.WriteString(link + "\n\n")
-	b.WriteString(untilText(sd.ExpiresAt))
-	if sd.MaxDownloads == 1 {
-		b.WriteString(" It opens once, then it is gone.")
-	} else if sd.MaxDownloads > 0 {
-		b.WriteString(fmt.Sprintf(" It can be downloaded %d times.", sd.MaxDownloads-sd.Downloads))
-	}
-	b.WriteString("\n")
+	vars["password_note"], vars["encrypted_note"] = "", ""
 	if sd.HasPassword {
-		b.WriteString(fmt.Sprintf("It needs a password, which %s will give you separately.\n", who))
+		vars["password_note"] = fmt.Sprintf("It needs a password, which %s will give you separately.", who)
 	}
 	if sd.Encrypted {
-		b.WriteString("The files are end-to-end encrypted: the part after # is the key, so keep the link whole.\n")
+		vars["encrypted_note"] = "It is end-to-end encrypted: the part after # is the key, so keep the link whole."
 	}
-	b.WriteString("\n— sent with Pocket Files\n")
-	if err := mailer.Send(cfg, mailer.Message{To: to, Subject: subject, Body: b.String()}); err != nil {
+	subjectTpl := firstNonEmpty(st.MailSubject, defaultMailSubject)
+	if sd.Kind == "note" && st.MailSubject == "" {
+		subjectTpl = "{sender} sent you a note"
+	}
+	subject := strings.TrimSpace(fill(subjectTpl, vars))
+	body := fill(firstNonEmpty(st.MailBody, defaultMailBody), vars)
+	button := "Open the files"
+	if sd.Kind == "note" {
+		button = "Read the note"
+	}
+	if err := mailer.Send(cfg, mailer.Message{To: to, Subject: subject, Body: body, HTML: mailHTML(body, link, button)}); err != nil {
 		writeErr(w, http.StatusBadGateway, "the mail server said: "+err.Error())
 		return
 	}
@@ -223,19 +228,16 @@ func (s *Server) handleEmailRequest(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "email")
 		return
 	}
+	st, _ := s.store.GetSettings(ctx, u.ID)
 	who := cfg.FromName
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Hi,\n\n%s asks you for files: %s.\n\n", who, rq.Title))
-	if m := strings.TrimSpace(firstNonEmpty(in.Message, rq.Message)); m != "" {
-		b.WriteString(m + "\n\n")
-	}
-	b.WriteString("Drop them here — you will not see what others sent:\n" + s.publicLink("r", rq.ID) + "\n\n")
-	b.WriteString(untilText(rq.ExpiresAt) + "\n")
+	link := s.publicLink("r", rq.ID)
+	vars := map[string]string{"sender": who, "title": rq.Title, "link": link, "message": strings.TrimSpace(firstNonEmpty(in.Message, rq.Message)), "expires": expiresText(rq.ExpiresAt), "limit": "", "encrypted_note": "", "password_note": ""}
 	if rq.PasswordHash != "" {
-		b.WriteString(fmt.Sprintf("It needs a password, which %s will give you separately.\n", who))
+		vars["password_note"] = fmt.Sprintf("It needs a password, which %s will give you separately.", who)
 	}
-	b.WriteString("\n— sent with Pocket Files\n")
-	if err := mailer.Send(cfg, mailer.Message{To: to, Subject: fmt.Sprintf("%s asks you for files: %s", who, rq.Title), Body: b.String()}); err != nil {
+	subject := strings.TrimSpace(fill(firstNonEmpty(st.MailRequestSubject, defaultRequestSubject), vars))
+	body := fill(firstNonEmpty(st.MailRequestBody, defaultRequestBody), vars)
+	if err := mailer.Send(cfg, mailer.Message{To: to, Subject: subject, Body: body, HTML: mailHTML(body, link, "Upload files")}); err != nil {
 		writeErr(w, http.StatusBadGateway, "the mail server said: "+err.Error())
 		return
 	}

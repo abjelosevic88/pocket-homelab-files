@@ -186,4 +186,10 @@ type Settings struct {
 	SMTPFrom        string `json:"smtp_from"`
 	SMTPFromName    string `json:"smtp_from_name"`
 	SMTPTLS         string `json:"smtp_tls"` // none | starttls | tls
+
+	// Email templates ("" = the built-in text); {placeholders} are filled in.
+	MailSubject        string `json:"mail_subject"`
+	MailBody           string `json:"mail_body"`
+	MailRequestSubject string `json:"mail_request_subject"`
+	MailRequestBody    string `json:"mail_request_body"`
 }

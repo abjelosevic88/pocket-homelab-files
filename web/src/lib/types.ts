@@ -45,6 +45,7 @@ export interface Settings {
   notify_kind: 'apprise' | 'ntfy' | 'webhook'; notify_url: string; notify_token?: string; notify_sends: boolean; notify_uploads: boolean
   send_expiry: string; send_downloads: number; send_encrypted: boolean; trash_days: number
   smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_password_set: boolean; smtp_from: string; smtp_from_name: string; smtp_tls: 'none' | 'starttls' | 'tls'
+  mail_subject: string; mail_body: string; mail_request_subject: string; mail_request_body: string
 }
 
 export interface APIToken { id: number; name: string; prefix: string; last_used_at: string | null; created_at: string }
