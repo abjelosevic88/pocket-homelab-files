@@ -187,7 +187,7 @@ select.xs { width: auto; padding: 2px 6px; font-size: 12px; border-radius: 6px; 
 .menu button, .menu a { font: inherit; text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: 6px; color: var(--text); cursor: pointer; display: block; }
 .menu button:hover, .menu a:hover { background: var(--surface-2); text-decoration: none; }
 .menu hr { margin: 4px 2px; }
-.ctx-menu { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 4px; display: grid; min-width: 190px; }
+.ctx-menu { position: fixed; z-index: 60; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 4px; display: grid; min-width: 220px; }
 .ctx-menu button { font: inherit; text-align: left; background: none; border: 0; padding: 8px 10px; border-radius: 6px; color: var(--text); cursor: pointer; }
 .ctx-menu button:hover { background: var(--surface-2); }
 
@@ -425,7 +425,7 @@ input.toggle:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 .c-size, .c-mod { font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .c-more { display: grid; place-items: center; }
 .row-more { opacity: 0; }
-.file-row:hover .row-more, .file-row .menu-wrap:has(.menu) .row-more { opacity: 1; }
+.file-row:hover .row-more, .row-more.on { opacity: 1; }
 .sort-head { font: inherit; background: none; border: 0; text-align: left; color: inherit; cursor: pointer; padding: 0; }
 .sort-head.on { color: var(--text); }
 .mini-thumb { width: 26px; height: 26px; object-fit: cover; border-radius: 5px; flex-shrink: 0; background: var(--surface-2); }
@@ -560,3 +560,6 @@ input.toggle:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 }
 .segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .segmented button .icon { display: inline-block; }
+.menu button, .menu a, .ctx-menu button { display: flex; align-items: center; gap: 10px; }
+.menu .icon, .ctx-menu .icon { color: var(--muted); }
+.ctx-menu button.danger-text .icon, .menu button.danger-text .icon { color: var(--danger); }

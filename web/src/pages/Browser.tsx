@@ -306,7 +306,8 @@ export default function Browser() {
               <span className="c-size muted">{e.is_dir ? '—' : bytes(e.size)}</span>
               <span className="c-mod muted" title={stamp(e.modified)}>{ago(e.modified)}</span>
               <span className="c-more" onClick={ev => ev.stopPropagation()}>
-                <Dropdown align="right" className="icon-btn row-more" title="More" label={<Icon name="more" size={16} />}>{close => <div onClick={close}>{actionsFor([e], true)}</div>}</Dropdown>
+                <button className={`icon-btn row-more ${menu?.entry.path === e.path ? 'on' : ''}`} title="More" aria-label="More"
+                  onClick={ev => { const r = ev.currentTarget.getBoundingClientRect(); setMenu({ x: r.right - 220, y: r.bottom + 4, entry: e }) }}><Icon name="more" size={16} /></button>
               </span>
             </div>
           ))}
