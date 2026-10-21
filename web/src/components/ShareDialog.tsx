@@ -7,7 +7,8 @@ import { Avatar } from './people'
 import { Icon } from './icons'
 import { EmailSetupHint, RecipientList } from './EmailLink'
 import { defaultOptions, downloadsLabel, SendOptionsForm } from './SendOptions'
-import { CopyField, Modal, Progress, Segmented, Select, copyText, useToast } from './ui'
+import { CopyField, Modal, Progress, Segmented, copyText, useToast } from './ui'
+import { Select } from './Select'
 
 /**
  * Share files: type an email and press Send (a link is made and mailed in
@@ -94,7 +95,7 @@ function SendShare({ space, entries, onClose, onPeople }: { space: string; entri
         <form className="grid" style={{ gap: 8 }} onSubmit={e => { e.preventDefault(); if (to.trim()) send() }}>
           <div className="row">
             <input autoFocus type="text" inputMode="email" list="rcpt-share" value={to} onChange={e => setTo(e.target.value)} placeholder="Email address" />
-            <button className="btn primary" disabled={!!busy || !to.trim()}><Icon name="send" size={15} /> {busy === 'send' ? 'Sending…' : 'Send'}</button>
+            <button type="submit" className="btn primary" disabled={!!busy || !to.trim()}><Icon name="send" size={15} /> {busy === 'send' ? 'Sending…' : 'Send'}</button>
           </div>
           <RecipientList id="rcpt-share" />
           <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} placeholder="Add a message (optional)" />
@@ -149,21 +150,21 @@ function PeopleShare({ entry, onClose, onBack }: { entry: Entry; onClose: () => 
       <div className="member-list">
         {members.map(m => (
           <div key={key(m)} className="member-row">
-            <Avatar user={{ id: m.user_id, name: m.name || '', email: m.email || '', username: '', role: 'member', created_at: '' }} />
+            <Avatar user={{ id: m.user_id, name: m.name || '', email: m.email || '' }} size={28} />
             <span className="grow"><b>{m.name || m.email}</b><br /><small className="muted">{m.email}</small></span>
             <Segmented size="sm" value={m.perm} options={[{ value: 'view' as Perm, label: 'Can view' }, { value: 'edit' as Perm, label: 'Can edit' }]} onChange={p => setMembers(ms => ms.map(x => key(x) === key(m) ? { ...x, perm: p } : x))} />
-            <button className="icon-btn" onClick={() => setMembers(ms => ms.filter(x => key(x) !== key(m)))} title="Remove"><Icon name="x" size={15} /></button>
+            <button type="button" className="icon-btn" onClick={() => setMembers(ms => ms.filter(x => key(x) !== key(m)))} title="Remove"><Icon name="x" size={15} /></button>
           </div>
         ))}
         {!members.length && <p className="muted small">Not shared with anyone here yet.</p>}
       </div>
-      {others.length > 0 ? <Select value="" placeholder="Add a person…" className="btn" options={others.map(p => ({ value: p.email, label: <span className="row"><b>{p.name || p.email}</b><small className="muted">{p.name ? p.email : ''}</small></span> }))} onChange={email => { const p = people.find(x => x.email === email)!; setMembers(ms => [...ms, { user_id: p.id, name: p.name, email: p.email, perm: 'view' }]) }} />
+      {others.length > 0 ? <Select value="" placeholder="Add a person…" label="Add a person" searchable={others.length > 5} options={others.map(p => ({ value: p.email, label: p.name || p.email, description: p.name ? p.email : undefined, keywords: p.email, icon: <Avatar user={p} size={22} /> }))} onChange={email => { const p = people.find(x => x.email === email)!; setMembers(ms => [...ms, { user_id: p.id, name: p.name, email: p.email, perm: 'view' }]) }} />
         : !members.length && <p className="small muted">Nobody else is in this household yet (add people in Pocket Core).</p>}
       <div className="row wrap"><span className="grow">Everyone on this box</span><Segmented size="sm" value={everyone} options={[{ value: '' as const, label: 'No' }, { value: 'view' as const, label: 'Can view' }, { value: 'edit' as const, label: 'Can edit' }]} onChange={setEveryone} /></div>
       <div className="form-actions">
-        <button className="btn ghost" onClick={onBack}><Icon name="chevronLeft" size={15} /> Back</button>
+        <button type="button" className="btn ghost" onClick={onBack}><Icon name="chevronLeft" size={15} /> Back</button>
         {share?.id ? <span className="grow small muted right">Shared since {new Date(share.created_at).toLocaleDateString()}</span> : <span className="grow" />}
-        <button className="btn primary" disabled={busy} onClick={save}>Save</button>
+        <button type="button" className="btn primary" disabled={busy} onClick={save}>Save</button>
       </div>
     </div>
   )

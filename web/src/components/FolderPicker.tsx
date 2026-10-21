@@ -41,8 +41,8 @@ export function FolderPicker({ title, button, startSpace = 'home', startPath = '
       </div>
       <div className="form-actions">
         <span className="grow small muted ellipsis">{cur?.name}{path === '/' ? '' : path}</span>
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn primary" disabled={!data || (writableOnly && !data.writable)} onClick={() => onPick(space, path)}>{button}</button>
+        <button type="button" className="btn" onClick={onClose}>Cancel</button>
+        <button type="button" className="btn primary" disabled={!data || (writableOnly && !data.writable)} onClick={() => onPick(space, path)}>{button}</button>
       </div>
     </Modal>
   )

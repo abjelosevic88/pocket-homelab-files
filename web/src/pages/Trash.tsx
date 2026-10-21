@@ -16,7 +16,7 @@ export default function Trash() {
   return (
     <div className="page">
       <PageHeader title="Trash" sub={settings?.trash_days ? `Emptied automatically after ${settings.trash_days} days. Things deleted in mounts skip the trash.` : 'Kept until you empty it.'}
-        actions={data?.length ? <button className="btn danger-text" onClick={() => setEmpty(true)}><Icon name="trash" size={15} /> Empty trash</button> : undefined} />
+        actions={data?.length ? <button type="button" className="btn danger-text" onClick={() => setEmpty(true)}><Icon name="trash" size={15} /> Empty trash</button> : undefined} />
       {loading && !data && <Loading />}
       {data && !data.length && <Empty title="The trash is empty" icon={<Icon name="trash" size={28} />} />}
       {data && data.length > 0 && <div className="file-table trash">
@@ -25,7 +25,7 @@ export default function Trash() {
             <span className="c-name"><FileGlyph name={t.name} mime="" isDir={t.is_dir} size={20} /><span className="name ellipsis" title={t.orig_path}>{t.name}<small className="muted path-hint"> {t.orig_path.split('/').slice(0, -1).join('/') || '/'}</small></span></span>
             <span className="c-size muted">{bytes(t.size)}</span>
             <span className="c-mod muted" title={stamp(t.deleted_at)}>{ago(t.deleted_at)}</span>
-            <span className="row"><button className="btn sm" onClick={() => restore(t)}><Icon name="restore" size={13} /> Restore</button><button className="icon-btn" title="Delete for good" onClick={() => purge(t)}><Icon name="x" size={15} /></button></span>
+            <span className="row"><button type="button" className="btn sm" onClick={() => restore(t)}><Icon name="restore" size={13} /> Restore</button><button type="button" className="icon-btn" title="Delete for good" onClick={() => purge(t)}><Icon name="x" size={15} /></button></span>
           </div>
         ))}
       </div>}

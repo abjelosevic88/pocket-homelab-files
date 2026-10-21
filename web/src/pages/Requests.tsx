@@ -8,7 +8,8 @@ import { EmailLink, EmailSetupHint, RecipientList } from '../components/EmailLin
 import type { Request } from '../lib/types'
 import { Icon } from '../components/icons'
 import { FolderPicker } from '../components/FolderPicker'
-import { Confirm, CopyField, Empty, Field, Loading, Modal, PageHeader, Select, Switch, copyText, useAsync, useToast } from '../components/ui'
+import { Confirm, CopyField, Empty, Field, Loading, Modal, PageHeader, Switch, copyText, useAsync, useToast } from '../components/ui'
+import { Select } from '../components/Select'
 
 /** Upload links: people without an account drop files into one of your folders. */
 export default function Requests() {
@@ -21,13 +22,13 @@ export default function Requests() {
   const { toast } = useToast()
   return (
     <div className="page">
-      <PageHeader title="Upload links" sub="Anyone with the link can drop files into a folder of yours — without seeing what is there." actions={<button className="btn primary" onClick={() => setCreate(true)}><Icon name="plus" size={15} /> New upload link</button>} />
+      <PageHeader title="Upload links" sub="Anyone with the link can drop files into a folder of yours — without seeing what is there." actions={<button type="button" className="btn primary" onClick={() => setCreate(true)}><Icon name="plus" size={15} /> New upload link</button>} />
       {loading && !data && <Loading />}
       {data && !data.length && <Empty title="No upload links yet" icon={<Icon name="inbox" size={30} />}>Ask a friend for the wedding photos, a client for their documents: make a link, send it, the files land in the folder you pick.</Empty>}
       <div className="link-list">
         {data?.map(r => (
           <div key={r.id} className={`link-card ${r.open ? '' : 'off'}`}>
-            <div className="link-ico" style={{ background: '#dcfce7', color: '#15803d' }}><Icon name="inbox" size={18} /></div>
+            <div className="link-ico green"><Icon name="inbox" size={18} /></div>
             <div className="grow">
               <div className="row wrap"><b>{r.title}</b>{!r.open && <span className="badge">{r.reason}</span>}{r.has_password && <span className="badge"><Icon name="lock" size={11} /> password</span>}</div>
               <div className="small muted">
@@ -38,10 +39,10 @@ export default function Requests() {
               </div>
             </div>
             <div className="row">
-              {r.open && <button className="btn sm" onClick={() => setMail(r)}><Icon name="send" size={13} /> Email</button>}
-              <button className="btn sm" onClick={() => copyText(r.url).then(() => toast('Link copied'))}><Icon name="copy" size={13} /> Copy</button>
-              <button className="icon-btn" title="Edit" onClick={() => setEdit(r)}><Icon name="edit" size={15} /></button>
-              <button className="icon-btn" title="Delete" onClick={() => setDel(r)}><Icon name="trash" size={15} /></button>
+              {r.open && <button type="button" className="btn sm" onClick={() => setMail(r)}><Icon name="send" size={13} /> Email</button>}
+              <button type="button" className="btn sm" onClick={() => copyText(r.url).then(() => toast('Link copied'))}><Icon name="copy" size={13} /> Copy</button>
+              <button type="button" className="icon-btn" title="Edit" onClick={() => setEdit(r)}><Icon name="edit" size={15} /></button>
+              <button type="button" className="icon-btn" title="Delete" onClick={() => setDel(r)}><Icon name="trash" size={15} /></button>
             </div>
           </div>
         ))}
@@ -87,7 +88,7 @@ export function RequestDialog({ space: s0 = 'home', path: p0 = '/', folderName, 
         <CopyField value={done.url} label="Copy link" />
         {emailed.length > 0 && <div className="callout success small">Emailed to {emailed.join(', ')}.</div>}
         <EmailLink kind="request" id={done.id} />
-        <div className="form-actions"><button className="btn primary" onClick={onClose}>Done</button></div>
+        <div className="form-actions"><button type="button" className="btn primary" onClick={onClose}>Done</button></div>
       </div>
     </Modal>
   )
@@ -98,16 +99,16 @@ export function RequestDialog({ space: s0 = 'home', path: p0 = '/', folderName, 
         <Field label="Message (optional)"><textarea value={form.message} onChange={e => set('message', e.target.value)} placeholder="Hi! Drop the photos from Saturday here." rows={2} /></Field>
         <Field label="Files land in" group><button type="button" className="btn folder-btn" onClick={() => setPick(true)}><Icon name="folder" size={15} /> {spaceName}{form.path === '/' ? '' : form.path}</button></Field>
         <div className="two-col tight">
-          <Field label={existing ? 'Expires (leave to keep)' : 'Expires after'} group><Select className="btn" value={form.expires} options={[...(existing ? [{ value: '', label: existing.expires_at ? 'Keep: ' + new Date(existing.expires_at).toLocaleDateString() : 'Keep: never' }] : []), ...EXPIRY_OPTIONS]} onChange={v => set('expires', v)} /></Field>
-          <Field label="Most files" group><Select className="btn" value={form.max_files} options={[0, 1, 5, 10, 25, 50, 100, 500].map(n => ({ value: n, label: n ? String(n) : 'No limit' }))} onChange={v => set('max_files', v)} /></Field>
+          <Field label={existing ? 'Expires (leave to keep)' : 'Expires after'} group><Select value={form.expires} options={[...(existing ? [{ value: '', label: existing.expires_at ? 'Keep: ' + new Date(existing.expires_at).toLocaleDateString() : 'Keep: never' }] : []), ...EXPIRY_OPTIONS]} onChange={v => set('expires', v)} /></Field>
+          <Field label="Most files" group><Select value={form.max_files} options={[0, 1, 5, 10, 25, 50, 100, 500].map(n => ({ value: n, label: n ? String(n) : 'No limit' }))} onChange={v => set('max_files', v)} /></Field>
         </div>
-        <Field label="Largest file" group><Select className="btn" value={form.max_file_mb} options={[0, 10, 100, 500, 1024, 4096, 20480].map(n => ({ value: n, label: n ? (n >= 1024 ? `${n / 1024} GB` : `${n} MB`) : 'No limit' }))} onChange={v => set('max_file_mb', v)} /></Field>
+        <Field label="Largest file" group><Select value={form.max_file_mb} options={[0, 10, 100, 500, 1024, 4096, 20480].map(n => ({ value: n, label: n ? (n >= 1024 ? `${n / 1024} GB` : `${n} MB`) : 'No limit' }))} onChange={v => set('max_file_mb', v)} /></Field>
         <Field label={existing?.has_password ? 'New password (leave empty to keep)' : 'Password (optional)'}><input type="password" value={form.password} onChange={e => set('password', e.target.value)} autoComplete="new-password" /></Field>
         {existing?.has_password && <Switch checked={form.remove_password} onChange={v => set('remove_password', v)} label="Remove the password" />}
         <Switch checked={form.notify} onChange={v => set('notify', v)} label="Tell me when files arrive" />
         {existing && <Switch checked={form.closed} onChange={v => set('closed', v)} label="Closed (stop taking files)" />}
         {!existing && (settings?.smtp_host ? <><Field label="Email the link to (optional)"><input type="text" inputMode="email" list="rcpt-req" value={emailTo} onChange={e => setEmailTo(e.target.value)} placeholder="name@example.com" /></Field><RecipientList id="rcpt-req" /></> : <EmailSetupHint />)}
-        <div className="form-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy} onClick={save}>{existing ? 'Save' : emailTo.trim() ? 'Create & email' : 'Create link'}</button></div>
+        <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn primary" disabled={busy} onClick={save}>{existing ? 'Save' : emailTo.trim() ? 'Create & email' : 'Create link'}</button></div>
       </div>
       {pick && <FolderPicker title="Where should the files go?" button="Use this folder" startSpace={form.space} startPath={form.path} onClose={() => setPick(false)} onPick={(sp, p) => { setForm(f => ({ ...f, space: sp, path: p })); setPick(false) }} />}
     </Modal>

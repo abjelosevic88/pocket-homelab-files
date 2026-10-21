@@ -96,13 +96,13 @@ export default function PublicSend() {
 
       {needsPw && <form className="grid pub-pw" style={{ gap: 10 }} onSubmit={e => { e.preventDefault(); unlock() }}>
         <label className="field"><span className="label"><Icon name="lock" size={12} /> Password</span><input type="password" autoFocus value={password} onChange={e => setPassword(e.target.value)} /></label>
-        <button className="btn primary lg" disabled={busy || !password}>{busy ? 'Checking…' : 'Unlock'}</button>
+        <button type="submit" className="btn primary lg" disabled={busy || !password}>{busy ? 'Checking…' : 'Unlock'}</button>
       </form>}
 
       {!needsPw && !opened && <>
         {files && !isNote && <FileList files={files} />}
         {ps.kind === 'live' && ps.entries && <LiveList entries={ps.entries} />}
-        <button className="btn primary lg pub-main" disabled={busy || (ps.encrypted && !fragment)} onClick={unlock}>
+        <button type="button" className="btn primary lg pub-main" disabled={busy || (ps.encrypted && !fragment)} onClick={unlock}>
           {busy ? <><span className="spinner sm" /> Opening…</> : isNote ? <><Icon name="eye" size={16} /> Show the note</> : <><Icon name="download" size={16} /> {ps.downloads_left === 1 ? 'Open (only once)' : 'Open'}</>}
         </button>
         {ps.downloads_left === 1 && <p className="small muted center"><Icon name="flame" size={12} style={{ display: 'inline', verticalAlign: '-2px', color: '#ea580c' }} /> This link works one time: after you open it, it is gone.</p>}
@@ -112,7 +112,7 @@ export default function PublicSend() {
 
       {opened && !isNote && ps.encrypted && files && <>
         <FileList files={files} onGet={busy ? undefined : getOne} />
-        <button className="btn primary lg pub-main" disabled={busy} onClick={getAll}><Icon name="download" size={16} /> {files.length === 1 ? 'Download' : 'Download all (.zip)'}</button>
+        <button type="button" className="btn primary lg pub-main" disabled={busy} onClick={getAll}><Icon name="download" size={16} /> {files.length === 1 ? 'Download' : 'Download all (.zip)'}</button>
       </>}
       {opened && !isNote && !ps.encrypted && ps.kind !== 'live' && files && <>
         <FileList files={files} hrefs={files.map((_, i) => fileURL(ps.id, i, opened.send.ticket!))} />
@@ -148,7 +148,7 @@ function FileList({ files, onGet, hrefs }: { files: { name: string; size: number
           <FileGlyph name={f.name} mime={f.type} isDir={false} size={18} />
           <span className="grow ellipsis" title={f.name}>{f.name}</span>
           <small className="muted">{bytes(f.size)}</small>
-          {hrefs ? <a className="icon-btn" href={hrefs[i]} title="Download"><Icon name="download" size={15} /></a> : onGet && files.length > 1 ? <button className="icon-btn" onClick={() => onGet(i)} title="Download"><Icon name="download" size={15} /></button> : null}
+          {hrefs ? <a className="icon-btn" href={hrefs[i]} title="Download"><Icon name="download" size={15} /></a> : onGet && files.length > 1 ? <button type="button" className="icon-btn" onClick={() => onGet(i)} title="Download"><Icon name="download" size={15} /></button> : null}
         </li>
       ))}
       {files.length > 300 && <li className="muted small">…and {files.length - 300} more</li>}
@@ -171,11 +171,11 @@ function LiveBrowser({ id, ticket, entries: top }: { id: string; ticket: string;
   const up = path && !top.some(e => e.path === path) ? path.split('/').slice(0, -1).join('/') || null : null
   return <>
     <ul className="pub-files">
-      {path !== null && <li><button className="link-btn row" onClick={() => setPath(up)}><Icon name="arrowUp" size={15} /> Back</button></li>}
+      {path !== null && <li><button type="button" className="link-btn row" onClick={() => setPath(up)}><Icon name="arrowUp" size={15} /> Back</button></li>}
       {list.map(e => (
         <li key={e.path}>
           <FileGlyph name={e.name} mime={e.mime} isDir={e.is_dir} size={18} />
-          {e.is_dir ? <button className="link-btn grow ellipsis" onClick={() => setPath(e.path)}><b>{e.name}</b></button> : <span className="grow ellipsis">{e.name}</span>}
+          {e.is_dir ? <button type="button" className="link-btn grow ellipsis" onClick={() => setPath(e.path)}><b>{e.name}</b></button> : <span className="grow ellipsis">{e.name}</span>}
           <small className="muted">{e.is_dir ? 'folder' : bytes(e.size)}</small>
           <a className="icon-btn" title={e.is_dir ? 'Download as zip' : 'Download'} href={e.is_dir ? `${PUB}/sends/${id}/live/zip?t=${t}&path=${encodeURIComponent(e.path)}` : `${PUB}/sends/${id}/live/file?t=${t}&path=${encodeURIComponent(e.path)}`}><Icon name="download" size={15} /></a>
         </li>
@@ -190,8 +190,8 @@ function NoteView({ text, format, reveal, setReveal, onCopy }: { text: string; f
   return (
     <div className="pub-note">
       <div className="row"><span className="grow small muted">{format === 'secret' ? 'Secret' : format === 'code' ? 'Code' : format === 'markdown' ? 'Markdown' : 'Text'}</span>
-        {format === 'secret' && <button className="btn sm" onClick={() => setReveal(!reveal)}><Icon name={reveal ? 'eyeOff' : 'eye'} size={13} /> {reveal ? 'Hide' : 'Show'}</button>}
-        <button className="btn sm" onClick={onCopy}><Icon name="copy" size={13} /> Copy</button></div>
+        {format === 'secret' && <button type="button" className="btn sm" onClick={() => setReveal(!reveal)}><Icon name={reveal ? 'eyeOff' : 'eye'} size={13} /> {reveal ? 'Hide' : 'Show'}</button>}
+        <button type="button" className="btn sm" onClick={onCopy}><Icon name="copy" size={13} /> Copy</button></div>
       {format === 'secret' ? <pre className="mono secret">{reveal ? text : '•'.repeat(Math.min(24, Math.max(8, text.length)))}</pre>
         : format === 'code' ? <pre className="mono">{text}</pre>
           : <div className="note-text">{text}</div>}

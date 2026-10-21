@@ -23,7 +23,7 @@ export function Preview({ space, entries, index, writable, onClose, onIndex, onS
   const kind = previewKind(e)
   useEffect(() => {
     const h = (ev: KeyboardEvent) => {
-      if ((ev.target as HTMLElement)?.tagName === 'TEXTAREA') return
+      if ((ev.target as HTMLElement)?.tagName === 'TEXTAREA' || document.querySelector('.modal-backdrop, .menu')) return
       if (ev.key === 'Escape') onClose()
       else if (ev.key === 'ArrowRight' && index < entries.length - 1) onIndex(index + 1)
       else if (ev.key === 'ArrowLeft' && index > 0) onIndex(index - 1)
@@ -40,17 +40,17 @@ export function Preview({ space, entries, index, writable, onClose, onIndex, onS
         {actions?.(e)}
         <a className="icon-btn" href={rawURL(space, e.path, true)} title="Download"><Icon name="download" size={17} /></a>
         <a className="icon-btn" href={src} target="_blank" rel="noreferrer" title="Open in a new tab"><Icon name="external" size={16} /></a>
-        <button className="icon-btn" onClick={onClose} title="Close (Esc)"><Icon name="x" size={18} /></button>
+        <button type="button" className="icon-btn" onClick={onClose} title="Close (Esc)"><Icon name="x" size={18} /></button>
       </div>
       <div className="viewer-body" onClick={ev => { if (ev.target === ev.currentTarget) onClose() }}>
-        {index > 0 && <button className="viewer-nav left" onClick={() => onIndex(index - 1)} aria-label="Previous"><Icon name="chevronLeft" size={26} /></button>}
+        {index > 0 && <button type="button" className="viewer-nav left" onClick={() => onIndex(index - 1)} aria-label="Previous"><Icon name="chevronLeft" size={26} /></button>}
         {kind === 'image' && <img key={src} src={src} alt={e.name} />}
         {kind === 'video' && <video key={src} src={src} controls autoPlay playsInline />}
         {kind === 'audio' && <div className="viewer-audio"><FileGlyph name={e.name} mime={e.mime} isDir={false} size={64} /><audio key={src} src={src} controls autoPlay /></div>}
         {kind === 'pdf' && <iframe key={src} src={src} title={e.name} />}
         {kind === 'text' && <TextView key={src} space={space} entry={e} writable={writable} onSaved={onSaved} />}
         {kind === 'none' && <div className="viewer-none"><FileGlyph name={e.name} mime={e.mime} isDir={false} size={72} /><p>No preview for this kind of file.</p><a className="btn primary" href={rawURL(space, e.path, true)}><Icon name="download" size={15} /> Download ({bytes(e.size)})</a></div>}
-        {index < entries.length - 1 && <button className="viewer-nav right" onClick={() => onIndex(index + 1)} aria-label="Next"><Icon name="chevronRight" size={26} /></button>}
+        {index < entries.length - 1 && <button type="button" className="viewer-nav right" onClick={() => onIndex(index + 1)} aria-label="Next"><Icon name="chevronRight" size={26} /></button>}
       </div>
     </div>
   )
@@ -72,8 +72,8 @@ function TextView({ space, entry, writable, onSaved }: { space: string; entry: E
     <div className="viewer-text">
       {writable && <div className="row viewer-text-bar">
         <span className="grow small muted">{editing ? 'Editing' : 'Plain text'}</span>
-        {editing ? <><button className="btn sm" onClick={() => { setDraft(text); setEditing(false) }}>Cancel</button><button className="btn sm primary" disabled={busy} onClick={save}>Save</button></>
-          : <button className="btn sm" onClick={() => setEditing(true)}><Icon name="edit" size={13} /> Edit</button>}
+        {editing ? <><button type="button" className="btn sm" onClick={() => { setDraft(text); setEditing(false) }}>Cancel</button><button type="button" className="btn sm primary" disabled={busy} onClick={save}>Save</button></>
+          : <button type="button" className="btn sm" onClick={() => setEditing(true)}><Icon name="edit" size={13} /> Edit</button>}
       </div>}
       {editing ? <textarea value={draft} onChange={e => setDraft(e.target.value)} spellCheck={false} autoFocus onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save() } }} /> : <pre>{text}</pre>}
     </div>

@@ -16,7 +16,7 @@ export function RecipientList({ id }: { id: string }) {
 }
 
 export function EmailSetupHint() {
-  return <p className="small muted"><Icon name="info" size={12} style={{ display: 'inline', verticalAlign: '-2px' }} /> To email links, set up your mail account in <Link to="/settings?tab=email">Settings → Email</Link>.</p>
+  return <p className="small muted"><Icon name="info" size={12} style={{ display: 'inline', verticalAlign: '-2px' }} /> To email links, set up your mail account in <Link to="/settings/email">Settings → Email</Link>.</p>
 }
 
 /** The "email it" box under a ready link. */
@@ -41,7 +41,7 @@ export function EmailLink({ kind, id, link = '', encrypted = false, onSent }: { 
       <Field label="Email it to" help={encrypted ? 'The link (with its key) passes through this server once to write the email; it is not stored.' : undefined}>
         <div className="row">
           <input type="text" inputMode="email" list={`rcpt-${id}`} value={to} onChange={e => setTo(e.target.value)} placeholder="name@example.com, another@example.com" />
-          <button className="btn primary" disabled={busy || !to.trim()}><Icon name="send" size={14} /> {busy ? 'Sending…' : 'Send'}</button>
+          <button type="submit" className="btn primary" disabled={busy || !to.trim()}><Icon name="send" size={14} /> {busy ? 'Sending…' : 'Send'}</button>
         </div>
       </Field>
       <RecipientList id={`rcpt-${id}`} />

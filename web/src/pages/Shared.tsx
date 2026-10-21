@@ -36,8 +36,8 @@ export default function Shared() {
             <div className="link-ico plain"><FileGlyph name={s.path.split('/').pop() || ''} mime="" isDir={s.is_dir} size={24} shared /></div>
             <div className="grow"><Link to={s.is_dir ? filesRoute('home', s.path) : filesRoute('home', s.path.split('/').slice(0, -1).join('/') || '/') + '?open=' + encodeURIComponent(s.path.split('/').pop() || '')}><b>{s.path}</b></Link>
               <div className="small muted">{[...(s.members || []).map(m => `${m.name || m.email} (${m.perm === 'edit' ? 'edit' : 'view'})`), perm(s)].filter(Boolean).join(', ')}</div></div>
-            <button className="btn sm" onClick={() => setEdit(s)}><Icon name="users" size={13} /> People</button>
-            <button className="icon-btn" title="Stop sharing" onClick={() => setStop(s)}><Icon name="x" size={15} /></button>
+            <button type="button" className="btn sm" onClick={() => setEdit(s)}><Icon name="users" size={13} /> People</button>
+            <button type="button" className="icon-btn" title="Stop sharing" onClick={() => setStop(s)}><Icon name="x" size={15} /></button>
           </div>
         ))}
       </div> : <Empty title="You share nothing yet" icon={<Icon name="folderShared" size={28} />}>Open a folder's menu in My files → “Share with people”.</Empty>)}

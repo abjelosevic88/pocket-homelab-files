@@ -71,7 +71,7 @@ export default function SendPage() {
             <input ref={input} type="file" multiple hidden onChange={e => { addFiles(filesFromInput(e.target.files)); e.target.value = '' }} />
             <input ref={dirInput} type="file" hidden {...{ webkitdirectory: '' } as Record<string, string>} onChange={e => { addFiles(filesFromInput(e.target.files)); e.target.value = '' }} />
             {items.length > 0 && <ul className="send-items">
-              {items.slice(0, 200).map((it, i) => <li key={i}><FileGlyph name={it.name} mime={it.type} isDir={false} size={16} /><span className="grow ellipsis">{it.name}</span><small className="muted">{bytes(it.file.size)}</small><button className="icon-btn sm" onClick={() => setItems(x => x.filter((_, j) => j !== i))}><Icon name="x" size={13} /></button></li>)}
+              {items.slice(0, 200).map((it, i) => <li key={i}><FileGlyph name={it.name} mime={it.type} isDir={false} size={16} /><span className="grow ellipsis">{it.name}</span><small className="muted">{bytes(it.file.size)}</small><button type="button" className="icon-btn sm" onClick={() => setItems(x => x.filter((_, j) => j !== i))}><Icon name="x" size={13} /></button></li>)}
               {items.length > 200 && <li className="muted small">…and {items.length - 200} more</li>}
               <li className="send-total"><span className="grow">{plural(items.length, 'file')}</span><b>{bytes(total)}</b></li>
             </ul>}
@@ -82,8 +82,8 @@ export default function SendPage() {
           <SendOptionsForm value={opt} onChange={setOpt} />
           {progress && <Progress value={progress[0]} total={progress[1]} label={opt.encrypted ? 'Encrypting and uploading…' : 'Uploading…'} />}
           <div className="form-actions">
-            {busy && <button className="btn" onClick={() => abort.current?.abort()}>Cancel</button>}
-            <button className="btn primary lg" disabled={busy || (mode === 'files' ? !items.length : !note.trim())} onClick={go}><Icon name={opt.email_to?.trim() ? 'send' : 'link'} size={16} /> {busy ? 'Working…' : opt.email_to?.trim() ? 'Create & email' : 'Create link'}</button>
+            {busy && <button type="button" className="btn" onClick={() => abort.current?.abort()}>Cancel</button>}
+            <button type="button" className="btn primary lg" disabled={busy || (mode === 'files' ? !items.length : !note.trim())} onClick={go}><Icon name={opt.email_to?.trim() ? 'send' : 'link'} size={16} /> {busy ? 'Working…' : opt.email_to?.trim() ? 'Create & email' : 'Create link'}</button>
           </div>
         </Card>
         <div className="send-side">
@@ -99,7 +99,7 @@ export default function SendPage() {
           {result.emailError && <div className="callout danger small">Not emailed: {result.emailError}</div>}
           <p className="small muted">{result.link.includes('#') ? 'The part after # is the key: whoever has the whole link can open it, this server cannot.' : 'Anyone with this link can download until it expires.'}{result.password && ' Send the password another way.'}</p>
           <EmailLink kind="send" id={result.id} link={result.link} encrypted={result.encrypted} />
-          <div className="form-actions"><button className="btn primary" onClick={() => setResult(null)}>Done</button></div>
+          <div className="form-actions"><button type="button" className="btn primary" onClick={() => setResult(null)}>Done</button></div>
         </div>
       </Modal>}
     </div>
@@ -127,10 +127,10 @@ function LinkRow({ s, onChanged }: { s: Send; onChanged: () => void }) {
         <div className="small muted">{s.kind !== 'note' && s.total_size > 0 && <>{bytes(s.total_size)} · </>}{left} · {s.expires_at ? <span title={stamp(s.expires_at)}>{new Date(s.expires_at) < new Date() ? 'expired ' + ago(s.expires_at) : 'expires ' + new Date(s.expires_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span> : 'never expires'}</div>
       </div>
       <div className="row">
-        {link && s.available && <button className="btn sm" onClick={() => setMail(true)} title="Email this link"><Icon name="send" size={13} /> Email</button>}
-        {link ? <button className="btn sm" onClick={() => copyText(link).then(() => toast('Link copied'))}><Icon name="copy" size={13} /> Copy</button>
+        {link && s.available && <button type="button" className="btn sm" onClick={() => setMail(true)} title="Email this link"><Icon name="send" size={13} /> Email</button>}
+        {link ? <button type="button" className="btn sm" onClick={() => copyText(link).then(() => toast('Link copied'))}><Icon name="copy" size={13} /> Copy</button>
           : <span className="small muted" title="The key of an encrypted link lives only in the browser that made it">key elsewhere</span>}
-        <button className="icon-btn" title="Delete" onClick={() => setDel(true)}><Icon name="trash" size={15} /></button>
+        <button type="button" className="icon-btn" title="Delete" onClick={() => setDel(true)}><Icon name="trash" size={15} /></button>
       </div>
       {open && <LinkDetails id={s.id} onClose={() => { setOpen(false); onChanged() }} />}
       {mail && link && <Modal title={`Email “${s.label || 'link'}”`} onClose={() => setMail(false)}><EmailLink kind="send" id={s.id} link={link} encrypted={s.encrypted} onSent={() => setTimeout(() => setMail(false), 900)} /></Modal>}
@@ -155,10 +155,10 @@ function LinkDetails({ id, onClose }: { id: string; onClose: () => void }) {
           <span>Size</span><b>{bytes(data.total_size)} · {plural(data.file_count, data.kind === 'live' ? 'item' : 'file')}</b>
           <span>Made</span><b>{stamp(data.created_at)}</b></div>
         <div className="row wrap">
-          <button className="btn sm" onClick={() => patch({ expires: '1d' })}>Extend 1 day</button>
-          <button className="btn sm" onClick={() => patch({ expires: '7d' })}>Extend 7 days</button>
-          <button className="btn sm" onClick={() => patch({ max_downloads: data.max_downloads ? data.max_downloads + 5 : 0 })} disabled={!data.max_downloads}>+5 downloads</button>
-          <button className="btn sm danger-text" onClick={() => patch({ expires: 'now' })}>Expire now</button>
+          <button type="button" className="btn sm" onClick={() => patch({ expires: '1d' })}>Extend 1 day</button>
+          <button type="button" className="btn sm" onClick={() => patch({ expires: '7d' })}>Extend 7 days</button>
+          <button type="button" className="btn sm" onClick={() => patch({ max_downloads: data.max_downloads ? data.max_downloads + 5 : 0 })} disabled={!data.max_downloads}>+5 downloads</button>
+          <button type="button" className="btn sm danger-text" onClick={() => patch({ expires: 'now' })}>Expire now</button>
         </div>
         <p className="small muted">Limit: {downloadsLabel(data.max_downloads)}.</p>
         <h4>Downloads</h4>

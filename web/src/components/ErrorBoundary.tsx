@@ -19,7 +19,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode; 
         <h2>Something went wrong here</h2>
         {translated && <p>The browser translated this page, which pulls the text out from under it. Turn translation off for this site (the translate icon in the address bar → “Never translate this site”).</p>}
         <pre className="mono small">{this.state.error.message}</pre>
-        <div className="row"><button className="btn primary" onClick={() => location.reload()}>Reload</button><button className="btn" onClick={() => this.setState({ error: null })}>Try again</button></div>
+        <div className="row"><button type="button" className="btn primary" onClick={() => location.reload()}>Reload</button><button type="button" className="btn" onClick={() => this.setState({ error: null })}>Try again</button></div>
       </div>
     )
   }

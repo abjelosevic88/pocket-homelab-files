@@ -88,7 +88,7 @@ export default function PublicRequest() {
       </div>
       {!token ? <form className="grid pub-pw" style={{ gap: 10 }} onSubmit={e => { e.preventDefault(); unlock() }}>
         <label className="field"><span className="label"><Icon name="lock" size={12} /> Password</span><input type="password" autoFocus value={password} onChange={e => setPassword(e.target.value)} /></label>
-        <button className="btn primary lg" disabled={!password}>Continue</button>
+        <button type="submit" className="btn primary lg" disabled={!password}>Continue</button>
       </form> : <>
         <label className="field"><span className="label">Your name (optional, so they know who sent it)</span><input value={from} onChange={e => setFrom(e.target.value)} placeholder="e.g. Marko" /></label>
         <div className={`send-drop ${drag ? 'on' : ''}`} onClick={() => input.current?.click()}

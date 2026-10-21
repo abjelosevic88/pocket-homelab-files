@@ -22,7 +22,7 @@ export default function Starred() {
             <div className="link-ico plain">{s.entry ? <FileGlyph name={s.entry.name} mime={s.entry.mime} isDir={s.entry.is_dir} size={24} /> : <Icon name="file" size={20} />}</div>
             <div className="grow">{s.missing ? <b>{s.path.split('/').pop()}</b> : <Link to={to(s)}><b>{s.entry?.name || s.path}</b></Link>}
               <div className="small muted">{s.missing ? 'no longer there' : `${s.space_name}${s.path.split('/').slice(0, -1).join('/') || ''}${s.entry && !s.entry.is_dir ? ' · ' + bytes(s.entry.size) : ''}`}</div></div>
-            <button className="icon-btn" title="Remove star" onClick={() => unstar(s)}><Icon name="star" size={16} fill className="star-on" /></button>
+            <button type="button" className="icon-btn" title="Remove star" onClick={() => unstar(s)}><Icon name="star" size={16} fill className="star-on" /></button>
           </div>
         ))}
       </div>

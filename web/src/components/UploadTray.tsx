@@ -17,8 +17,8 @@ export function UploadTray() {
     <div className={`upload-tray ${min ? 'min' : ''}`}>
       <div className="tray-head">
         <span className="grow">{active.length ? `Uploading ${active.length} ${active.length === 1 ? 'file' : 'files'} · ${pct}%` : failed.length ? `${failed.length} failed` : 'Uploads done'}</span>
-        <button className="icon-btn sm" onClick={() => setMin(m => !m)} title={min ? 'Show' : 'Hide'}><Icon name={min ? 'chevronLeft' : 'chevronDown'} size={14} /></button>
-        {!active.length && <button className="icon-btn sm" onClick={clear} title="Close"><Icon name="x" size={14} /></button>}
+        <button type="button" className="icon-btn sm" onClick={() => setMin(m => !m)} title={min ? 'Show' : 'Hide'}><Icon name={min ? 'chevronLeft' : 'chevronDown'} size={14} /></button>
+        {!active.length && <button type="button" className="icon-btn sm" onClick={clear} title="Close"><Icon name="x" size={14} /></button>}
       </div>
       <div className="bar"><span className="fill" style={{ width: pct + '%' }} /></div>
       {!min && <ul className="tray-list">
@@ -26,7 +26,7 @@ export function UploadTray() {
           <li key={j.id} className={j.state}>
             <span className="grow ellipsis" title={j.name}>{j.name}</span>
             <small>{j.state === 'uploading' ? `${bytes(j.sent)} / ${bytes(j.size)}` : j.state === 'failed' ? j.error : j.state === 'waiting' ? 'waiting' : j.state === 'cancelled' ? 'cancelled' : bytes(j.size)}</small>
-            {(j.state === 'uploading' || j.state === 'waiting') ? <button className="icon-btn sm" onClick={() => cancel(j.id)} title="Cancel"><Icon name="x" size={13} /></button>
+            {(j.state === 'uploading' || j.state === 'waiting') ? <button type="button" className="icon-btn sm" onClick={() => cancel(j.id)} title="Cancel"><Icon name="x" size={13} /></button>
               : j.state === 'done' ? <Icon name="check" size={14} className="ok-ico" /> : <span style={{ width: 26 }} />}
           </li>
         ))}

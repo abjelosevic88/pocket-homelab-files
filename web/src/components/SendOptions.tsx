@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { EmailSetupHint, RecipientList } from './EmailLink'
 import { DOWNLOAD_OPTIONS, EXPIRY_OPTIONS, type SendOptions } from '../lib/sends'
 import { useApp } from '../lib/app-context'
-import { Field, Select, Switch } from './ui'
+import { Field, Switch } from './ui'
+import { Select } from './Select'
 import { Icon } from './icons'
 
 export function defaultOptions(s: ReturnType<typeof useApp>['settings']): SendOptions {
@@ -19,8 +20,8 @@ export function SendOptionsForm({ value, onChange, allowEncrypt = true, encryptH
   return (
     <div className="send-options">
       <div className="two-col tight">
-        <Field label="Expires after" group><Select value={value.expires} options={EXPIRY_OPTIONS} onChange={v => set('expires', v)} className="btn" /></Field>
-        <Field label="Download limit" group><Select value={value.max_downloads} options={DOWNLOAD_OPTIONS.map(n => ({ value: n, label: downloadsLabel(n) }))} onChange={v => set('max_downloads', v)} className="btn" /></Field>
+        <Field label="Expires after" group><Select value={value.expires} options={EXPIRY_OPTIONS} onChange={v => set('expires', v)} label="Expires after" /></Field>
+        <Field label="Download limit" group><Select value={value.max_downloads} options={DOWNLOAD_OPTIONS.map(n => ({ value: n, label: downloadsLabel(n) }))} onChange={v => set('max_downloads', v)} label="Download limit" /></Field>
       </div>
       {value.max_downloads === 1 && <p className="small muted mt-s"><Icon name="flame" size={12} style={{ display: 'inline', verticalAlign: '-2px', color: '#ea580c' }} /> Burns after the first download.</p>}
       <Field label="Password (optional)" help={value.encrypted && allowEncrypt ? 'Mixed into the key: without it the link opens nothing, and this server never sees it.' : 'Checked by the server before anything is shown.'}>

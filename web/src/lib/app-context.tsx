@@ -10,13 +10,28 @@ interface AppState {
   /** Changes whenever files changed anywhere: pages reload on it. */
   version: number
   bump: () => void
+  themeMode: ThemeMode
   theme: 'light' | 'dark'
+  setThemeMode: (m: ThemeMode) => void
   toggleTheme: () => void
   refresh: () => Promise<void>
   reloadSpaces: () => Promise<void>
   setUser: (u: User | null) => void
   setSettings: (s: Settings) => void
   saveSettings: (patch: Partial<Settings>) => Promise<void>
+}
+
+export type ThemeMode = 'system' | 'light' | 'dark'
+export const THEME_KEY = 'pf-theme-mode'
+
+/** The stored choice; no choice means: follow the system. */
+export function storedThemeMode(): ThemeMode {
+  const v = localStorage.getItem(THEME_KEY)
+  return v === 'light' || v === 'dark' ? v : 'system'
+}
+export function applyTheme(theme: 'light' | 'dark') {
+  document.documentElement.dataset.theme = theme
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', theme === 'dark' ? '#111113' : '#ffffff'))
 }
 
 const Ctx = createContext<AppState>(null!)
@@ -28,9 +43,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [spaces, setSpaces] = useState<Space[]>([])
   const [version, setVersion] = useState(0)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('pf-theme') as 'light' | 'dark') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
-
-  useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem('pf-theme', theme) }, [theme])
+  const [themeMode, setThemeModeRaw] = useState<ThemeMode>(storedThemeMode)
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const h = () => setSystemDark(mq.matches)
+    mq.addEventListener('change', h)
+    return () => mq.removeEventListener('change', h)
+  }, [])
+  const theme: 'light' | 'dark' = themeMode === 'system' ? (systemDark ? 'dark' : 'light') : themeMode
+  useEffect(() => { applyTheme(theme) }, [theme])
+  const setThemeMode = useCallback((m: ThemeMode) => { setThemeModeRaw(m); if (m === 'system') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, m) }, [])
   useEffect(() => { if (settings?.title) document.title = settings.title }, [settings?.title])
 
   const reloadSpaces = useCallback(async () => {
@@ -83,5 +106,5 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onShow); window.removeEventListener('focus', onShow) }
   }, [user, bump])
 
-  return <Ctx.Provider value={{ status, user, settings, spaces, version, bump, theme, toggleTheme: () => setTheme(t => t === 'dark' ? 'light' : 'dark'), refresh, reloadSpaces, setUser, setSettings, saveSettings }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ status, user, settings, spaces, version, bump, themeMode, theme, setThemeMode, toggleTheme: () => setThemeMode(theme === 'dark' ? 'light' : 'dark'), refresh, reloadSpaces, setUser, setSettings, saveSettings }}>{children}</Ctx.Provider>
 }

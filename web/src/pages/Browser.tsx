@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, filesRoute, qs, rawURL, thumbURL, V1, zipURL } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { ago, bytes, plural, stamp } from '../lib/format'
 import { filesFromDrop, filesFromInput, useUploads } from '../lib/uploads'
 import type { Entry, Listing } from '../lib/types'
 import { FileGlyph, Icon, fileKind } from '../components/icons'
-import { Confirm, ContextMenu, Dropdown, Empty, Loading, Prompt, useToast } from '../components/ui'
+import { setHere } from '../lib/here'
+import { type Anchor, Confirm, Empty, Loading, Menu, type MenuItem, MenuButton, Prompt, useIsMobile, useToast } from '../components/ui'
 import { Preview, previewKind } from '../components/Preview'
 import { ShareDialog } from '../components/ShareDialog'
 import { FolderPicker } from '../components/FolderPicker'
@@ -31,6 +32,7 @@ export default function Browser() {
   const { settings, saveSettings, version, bump, spaces } = useApp()
   const { add, onDone } = useUploads()
   const { toast } = useToast()
+  const mobile = useIsMobile()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<Listing | null>(null)
@@ -38,7 +40,7 @@ export default function Browser() {
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [anchor, setAnchor] = useState<string | null>(null)
   const [dialog, setDialog] = useState<Dialog | null>(null)
-  const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null)
+  const [menu, setMenu] = useState<{ at: Anchor; align: 'left' | 'right'; entry: Entry } | null>(null)
   const [preview, setPreview] = useState<number | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [dropFolder, setDropFolder] = useState<string | null>(null)
@@ -129,7 +131,7 @@ export default function Browser() {
   // keyboard
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (dialog || preview !== null || (e.target as HTMLElement)?.closest('input, textarea, .modal')) return
+      if (dialog || preview !== null || (e.target as HTMLElement)?.closest?.('input, textarea, .modal, .menu, .palette-backdrop')) return
       if ((e.metaKey || e.ctrlKey) && e.key === 'a') { e.preventDefault(); setSel(new Set(entries.map(x => x.path))) }
       else if (e.key === 'Escape') setSel(new Set())
       else if ((e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) && selected.length && writable) setDialog({ kind: 'delete', entries: selected })
@@ -201,87 +203,87 @@ export default function Browser() {
   const spaceName = spaceInfo?.name || spaces.find(s => s.id === space)?.name || (space === 'home' ? 'My files' : 'Files')
   const isMount = space.startsWith('mount:')
 
-  const actionsFor = (list: Entry[], inMenu = false) => {
+  const actionsFor = (list: Entry[]): MenuItem[] => {
     const one = list.length === 1 ? list[0] : null
-    const B = ({ icon, label, on, danger }: { icon: Parameters<typeof Icon>[0]['name']; label: string; on: () => void; danger?: boolean }) =>
-      <button className={danger ? 'danger-text' : ''} onClick={on}><Icon name={icon} size={15} /> {label}</button>
-    return <>
-      {one && !one.is_dir && previewKind(one) !== 'none' && inMenu && <B icon="eye" label="Open" on={() => open(one)} />}
-      {one?.is_dir && inMenu && <B icon="folder" label="Open" on={() => open(one)} />}
-      <B icon="download" label={one && !one.is_dir ? 'Download' : 'Download as zip'} on={() => download(list)} />
-      <B icon="send" label="Share…" on={() => setDialog({ kind: 'share', entries: list })} />
-      {one && <B icon="star" label={one.starred ? 'Remove star' : 'Star'} on={() => star(one)} />}
-      <hr />
-      {writable && one && <B icon="edit" label="Rename" on={() => setDialog({ kind: 'rename', entry: one })} />}
-      {writable && <B icon="move" label="Move to…" on={() => setDialog({ kind: 'move', entries: list })} />}
-      <B icon="copy" label="Copy to…" on={() => setDialog({ kind: 'copy', entries: list })} />
-      {writable && <><hr /><B icon="trash" label={isMount ? 'Delete for good' : 'Move to trash'} danger on={() => setDialog({ kind: 'delete', entries: list })} /></>}
-    </>
+    const items: MenuItem[] = []
+    if (one && !one.is_dir && previewKind(one) !== 'none') items.push({ label: 'Open', icon: 'eye', onSelect: () => open(one) })
+    if (one?.is_dir) items.push({ label: 'Open', icon: 'folder', onSelect: () => open(one) })
+    items.push({ label: one && !one.is_dir ? 'Download' : 'Download as zip', icon: 'download', onSelect: () => download(list) })
+    items.push({ label: 'Share…', icon: 'send', onSelect: () => setDialog({ kind: 'share', entries: list }) })
+    if (one) items.push({ label: one.starred ? 'Remove star' : 'Star', icon: 'star', onSelect: () => star(one) })
+    items.push('sep')
+    if (writable && one) items.push({ label: 'Rename', icon: 'edit', hint: 'F2', onSelect: () => setDialog({ kind: 'rename', entry: one }) })
+    if (writable) items.push({ label: 'Move to…', icon: 'move', onSelect: () => setDialog({ kind: 'move', entries: list }) })
+    items.push({ label: 'Copy to…', icon: 'copy', onSelect: () => setDialog({ kind: 'copy', entries: list }) })
+    if (writable) items.push('sep', { label: isMount ? 'Delete for good' : 'Move to trash', icon: 'trash', danger: true, onSelect: () => setDialog({ kind: 'delete', entries: list }) })
+    return items
   }
+
+  // the open folder, for the sidebar's New menu, the palette and the shortcuts
+  const folderName = crumbs.length ? crumbs[crumbs.length - 1] : spaceName
+  useEffect(() => { if (data) setHere({ space, path, writable, name: folderName }) }, [data, space, path, writable, folderName])
+  useEffect(() => () => setHere(null), [])
+
+  const sortItems: MenuItem[] = [
+    { heading: 'View' },
+    { label: 'List', checked: view === 'list', onSelect: () => saveSettings({ view: 'list' }) },
+    { label: 'Grid', checked: view === 'grid', onSelect: () => saveSettings({ view: 'grid' }) },
+    'sep',
+    { heading: 'Sort by' },
+    ...(['name', 'modified', 'size', 'type'] as const).map(k => ({ label: k[0].toUpperCase() + k.slice(1), checked: sort === k, hint: sort === k ? <Icon name={desc ? 'arrowDown' : 'arrowUp'} size={13} /> : undefined, onSelect: () => saveSettings(sort === k ? { sort_desc: !desc } : { sort: k, sort_desc: k === 'modified' || k === 'size' }) })),
+    'sep',
+    { label: `${settings?.show_hidden ? 'Hide' : 'Show'} hidden files`, icon: settings?.show_hidden ? 'eyeOff' : 'eye', onSelect: () => { saveSettings({ show_hidden: !settings?.show_hidden }); setTimeout(bump, 100) } },
+  ]
 
   return (
     <div className="page browser" onDragEnter={onDragEnter} onDragLeave={onDragLeave} onDragOver={onDragOver} onDrop={e => onDrop(e)}>
       <div className="browser-head">
-        <nav className="crumbs">
-          <Link to={filesRoute(space)} className="crumb-root">
-            <Icon name={space === 'home' ? 'home' : isMount ? 'disk' : 'folderShared'} size={16} />
-            <span>{spaceName}</span>
-          </Link>
-          {crumbs.map((c, i) => <React.Fragment key={i}><Icon name="chevronRight" size={14} className="faint" /><Link to={filesRoute(space, '/' + crumbs.slice(0, i + 1).join('/'))} className={i === crumbs.length - 1 ? 'cur' : ''}>{c}</Link></React.Fragment>)}
-          {spaceInfo?.owner && <span className="badge">from {spaceInfo.owner}</span>}
-          {data && !writable && <span className="badge" title="You can look and download, not change"><Icon name="lock" size={11} /> view only</span>}
-        </nav>
         <div className="toolbar">
           <div className="tool-search">
             <Icon name="search" size={15} className="muted" />
             <input value={q || filter} onChange={e => { if (q) setParams(p => { const n = new URLSearchParams(p); n.delete('q'); return n }); setFilter(e.target.value) }}
               onKeyDown={e => { if (e.key === 'Enter' && filter.trim()) setParams({ q: filter.trim() }); if (e.key === 'Escape') { setFilter(''); setParams({}) } }}
-              placeholder={`Filter · Enter searches all of ${crumbs.length ? crumbs[crumbs.length - 1] : spaceName}`} />
-            {(filter || q) && <button className="icon-btn sm" onClick={() => { setFilter(''); setParams({}) }}><Icon name="x" size={13} /></button>}
+              placeholder={mobile ? 'Filter · Enter to search' : `Filter · Enter searches all of ${folderName}`} aria-label="Filter or search" />
+            {(filter || q) && <button type="button" className="btn ghost icon-only xs" aria-label="Clear" onClick={() => { setFilter(''); setParams({}) }}><Icon name="x" size={13} /></button>}
           </div>
+          {spaceInfo?.owner && <span className="badge">from {spaceInfo.owner}</span>}
+          {data && !writable && <span className="badge" title="You can look and download, not change"><Icon name="lock" size={11} /> view only</span>}
           <span className="spacer" />
           {writable && <>
-            <Dropdown align="right" className="btn primary" label={<><Icon name="upload" size={15} /> Upload</>}>{close => <>
-              <button onClick={() => { close(); fileInput.current?.click() }}><Icon name="file" size={15} /> Files…</button>
-              <button onClick={() => { close(); dirInput.current?.click() }}><Icon name="folderUp" size={15} /> A folder…</button>
-              <hr />
-              <button onClick={() => { close(); setDialog({ kind: 'request' }) }}><Icon name="inbox" size={15} /> Ask someone for files…</button>
-            </>}</Dropdown>
-            <button className="btn" onClick={() => setDialog({ kind: 'mkdir' })} title="New folder"><Icon name="folderPlus" size={15} /><span className="hide-sm">New folder</span></button>
+            <MenuButton align="right" width={240} className="btn primary" label="Upload" items={[
+              { label: 'Files…', icon: 'file', onSelect: () => fileInput.current?.click() },
+              { label: 'A folder…', icon: 'folderUp', onSelect: () => dirInput.current?.click() },
+              'sep',
+              { label: 'Ask someone for files…', icon: 'inbox', onSelect: () => setDialog({ kind: 'request' }) },
+            ]}><Icon name="upload" size={15} /><span className="hide-sm">Upload</span></MenuButton>
+            <button type="button" className="btn" onClick={() => setDialog({ kind: 'mkdir' })} title="New folder (n)"><Icon name="folderPlus" size={15} /><span className="hide-sm">New folder</span></button>
           </>}
-          <Dropdown align="right" className="btn icon-only" title="View and sort" label={<Icon name={view === 'grid' ? 'grid' : 'list'} size={16} />}>{close => <>
-            <button onClick={() => { close(); saveSettings({ view: 'list' }) }}><Icon name="list" size={15} /> List {view === 'list' && '✓'}</button>
-            <button onClick={() => { close(); saveSettings({ view: 'grid' }) }}><Icon name="grid" size={15} /> Grid {view === 'grid' && '✓'}</button>
-            <hr />
-            {(['name', 'modified', 'size', 'type'] as const).map(k => <button key={k} onClick={() => { close(); saveSettings(sort === k ? { sort_desc: !desc } : { sort: k, sort_desc: k === 'modified' || k === 'size' }) }}>Sort by {k}{sort === k ? (desc ? ' ↓' : ' ↑') : ''}</button>)}
-            <hr />
-            <button onClick={() => { close(); saveSettings({ show_hidden: !settings?.show_hidden }); setTimeout(bump, 100) }}>{settings?.show_hidden ? 'Hide' : 'Show'} hidden files</button>
-          </>}</Dropdown>
+          <MenuButton align="right" width={220} className="btn icon-only" label="View and sort" items={sortItems}><Icon name={view === 'grid' ? 'grid' : 'list'} size={16} /></MenuButton>
         </div>
         <input ref={fileInput} type="file" multiple hidden onChange={e => { const l = filesFromInput(e.target.files); if (l.length) add(space, path, l); e.target.value = '' }} />
         <input ref={dirInput} type="file" hidden {...{ webkitdirectory: '', directory: '' } as Record<string, string>} onChange={e => { const l = filesFromInput(e.target.files); if (l.length) add(space, path, l); e.target.value = '' }} />
       </div>
 
       {sel.size > 0 && <div className="sel-bar">
-        <button className="icon-btn" onClick={() => setSel(new Set())} title="Clear selection"><Icon name="x" size={15} /></button>
+        <button type="button" className="btn ghost icon-only sm" onClick={() => setSel(new Set())} aria-label="Clear selection" title="Clear selection (esc)"><Icon name="x" size={15} /></button>
         <b>{sel.size} selected</b>
         <span className="spacer" />
-        <button className="btn sm" onClick={() => download(selected)}><Icon name="download" size={14} /> Download</button>
-        <button className="btn sm" onClick={() => setDialog({ kind: 'share', entries: selected })}><Icon name="send" size={14} /> Share</button>
-        {writable && <button className="btn sm" onClick={() => setDialog({ kind: 'move', entries: selected })}><Icon name="move" size={14} /> Move</button>}
-        {writable && <button className="btn sm danger-text" onClick={() => setDialog({ kind: 'delete', entries: selected })}><Icon name="trash" size={14} /> Delete</button>}
+        <button type="button" className="btn sm" onClick={() => download(selected)}><Icon name="download" size={14} /> Download</button>
+        <button type="button" className="btn sm" onClick={() => setDialog({ kind: 'share', entries: selected })}><Icon name="send" size={14} /> Share</button>
+        {writable && <button type="button" className="btn sm" onClick={() => setDialog({ kind: 'move', entries: selected })}><Icon name="move" size={14} /> Move</button>}
+        {writable && <button type="button" className="btn sm danger-text" onClick={() => setDialog({ kind: 'delete', entries: selected })}><Icon name="trash" size={14} /> Delete</button>}
       </div>}
 
       {err && <div className="callout danger mt">{err}</div>}
       {!data && !err && <Loading />}
-      {q && <div className="search-note">{searching ? <><span className="spinner sm" /> Searching…</> : <>{plural(results?.length || 0, 'match', 'matches')} for “{q}” below {crumbs.length ? crumbs[crumbs.length - 1] : spaceName}</>}</div>}
+      {q && <div className="search-note">{searching ? <><span className="spinner sm" /> Searching…</> : <>{plural(results?.length || 0, 'match', 'matches')} for “{q}” below {folderName}</>}</div>}
 
       {data && !entries.length && !searching && (
         q || filter ? <Empty title="Nothing matches" icon={<Icon name="search" size={28} />}>Try another word.</Empty>
           : <div className={`empty-drop ${writable ? '' : 'ro'}`} onClick={() => writable && fileInput.current?.click()}>
             <Icon name="upload" size={30} />
             <h3>{writable ? 'Drop files or folders here' : 'This folder is empty'}</h3>
-            {writable && <p className="muted">or click to choose them — they go to <b>{crumbs.length ? crumbs[crumbs.length - 1] : spaceName}</b></p>}
+            {writable && <p className="muted">or click to choose them — they go to <b>{folderName}</b></p>}
           </div>
       )}
 
@@ -300,7 +302,7 @@ export default function Browser() {
               onDragOver={e.is_dir ? ev => { ev.preventDefault(); ev.stopPropagation(); setDropFolder(e.path) } : undefined}
               onDragLeave={e.is_dir ? () => setDropFolder(d => d === e.path ? null : d) : undefined}
               onDrop={e.is_dir ? ev => { ev.stopPropagation(); onFolderDrop(ev, e) } : undefined}
-              onClick={ev => click(e, ev)} onContextMenu={ev => { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, entry: e }) }}>
+              onClick={ev => click(e, ev)} onContextMenu={ev => { ev.preventDefault(); setMenu({ at: { x: ev.clientX, y: ev.clientY, w: 0, h: 0 }, align: 'left', entry: e }) }}>
               <span className="c-check" onClick={ev => { ev.stopPropagation(); toggle(e.path); setAnchor(e.path) }}><input type="checkbox" checked={sel.has(e.path)} readOnly aria-label={`Select ${e.name}`} /></span>
               <span className="c-name">
                 {THUMB_TYPES.test(e.mime) && e.size < 60e6 ? <img className="mini-thumb" src={thumbURL(space, e.path, 64, e.modified)} alt="" loading="lazy" onError={ev => { (ev.target as HTMLImageElement).style.display = 'none' }} /> : <FileGlyph name={e.name} mime={e.mime} isDir={e.is_dir} size={22} shared={!!e.shared} />}
@@ -311,8 +313,8 @@ export default function Browser() {
               <span className="c-size muted">{e.is_dir ? '—' : bytes(e.size)}</span>
               <span className="c-mod muted" title={stamp(e.modified)}>{ago(e.modified)}</span>
               <span className="c-more" onClick={ev => ev.stopPropagation()}>
-                <button className={`icon-btn row-more ${menu?.entry.path === e.path ? 'on' : ''}`} title="More" aria-label="More"
-                  onClick={ev => { const r = ev.currentTarget.getBoundingClientRect(); setMenu({ x: r.right - 220, y: r.bottom + 4, entry: e }) }}><Icon name="more" size={16} /></button>
+                <button type="button" className={`btn ghost icon-only sm row-more ${menu?.entry.path === e.path ? 'on' : ''}`} title="More" aria-label={`More for ${e.name}`} aria-haspopup="menu"
+                  onClick={ev => { const r = ev.currentTarget.getBoundingClientRect(); setMenu({ at: { x: r.left, y: r.top, w: r.width, h: r.height }, align: 'right', entry: e }) }}><Icon name="more" size={16} /></button>
               </span>
             </div>
           ))}
@@ -328,7 +330,7 @@ export default function Browser() {
               onDragOver={e.is_dir ? ev => { ev.preventDefault(); ev.stopPropagation(); setDropFolder(e.path) } : undefined}
               onDragLeave={e.is_dir ? () => setDropFolder(d => d === e.path ? null : d) : undefined}
               onDrop={e.is_dir ? ev => { ev.stopPropagation(); onFolderDrop(ev, e) } : undefined}
-              onClick={ev => click(e, ev)} onContextMenu={ev => { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, entry: e }) }}>
+              onClick={ev => click(e, ev)} onContextMenu={ev => { ev.preventDefault(); setMenu({ at: { x: ev.clientX, y: ev.clientY, w: 0, h: 0 }, align: 'left', entry: e }) }}>
               <div className="card-thumb">
                 {THUMB_TYPES.test(e.mime) && e.size < 60e6 ? <img src={thumbURL(space, e.path, 320, e.modified)} alt="" loading="lazy" /> : <FileGlyph name={e.name} mime={e.mime} isDir={e.is_dir} size={52} shared={!!e.shared} />}
                 <span className="card-check" onClick={ev => { ev.stopPropagation(); toggle(e.path) }}><input type="checkbox" checked={sel.has(e.path)} readOnly /></span>
@@ -341,14 +343,14 @@ export default function Browser() {
         </div>
       )}
 
-      {dragOver && <div className="drop-overlay"><div><Icon name="upload" size={36} /><h2>Drop to upload</h2><p>into <b>{crumbs.length ? crumbs[crumbs.length - 1] : spaceName}</b></p></div></div>}
+      {dragOver && <div className="drop-overlay"><div><Icon name="upload" size={36} /><h2>Drop to upload</h2><p>into <b>{folderName}</b></p></div></div>}
 
-      {menu && <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>{actionsFor(sel.has(menu.entry.path) && sel.size > 1 ? selected : [menu.entry], true)}</ContextMenu>}
+      {menu && <Menu anchor={menu.at} align={menu.align} width={220} onClose={() => setMenu(null)} items={actionsFor(sel.has(menu.entry.path) && sel.size > 1 ? selected : [menu.entry])} />}
 
       {preview !== null && files[preview] && <Preview space={space} entries={files} index={preview} writable={writable} onClose={() => setPreview(null)} onIndex={setPreview} onSaved={load}
         actions={e => <>
-          <button className="icon-btn" onClick={() => star(e)} title={e.starred ? 'Remove star' : 'Star'}><Icon name="star" size={16} fill={e.starred} className={e.starred ? 'star-on' : ''} /></button>
-          <button className="icon-btn" onClick={() => setDialog({ kind: 'share', entries: [e] })} title="Share"><Icon name="send" size={16} /></button>
+          <button type="button" className="icon-btn" onClick={() => star(e)} title={e.starred ? 'Remove star' : 'Star'}><Icon name="star" size={16} fill={e.starred} className={e.starred ? 'star-on' : ''} /></button>
+          <button type="button" className="icon-btn" onClick={() => setDialog({ kind: 'share', entries: [e] })} title="Share"><Icon name="send" size={16} /></button>
         </>} />}
 
       {dialog?.kind === 'mkdir' && <Prompt title="New folder" placeholder="Folder name" button="Create" onClose={() => setDialog(null)} onDone={async name => {
@@ -362,11 +364,11 @@ export default function Browser() {
       {(dialog?.kind === 'move' || dialog?.kind === 'copy') && <FolderPicker title={`${dialog.kind === 'move' ? 'Move' : 'Copy'} ${dialog.entries.length === 1 ? '“' + dialog.entries[0].name + '”' : plural(dialog.entries.length, 'item')}`} button={dialog.kind === 'move' ? 'Move here' : 'Copy here'}
         startSpace={writable ? space : 'home'} startPath={writable ? path : '/'} onClose={() => setDialog(null)} onPick={(s, p) => { const d = dialog; setDialog(null); doMove(d.kind, d.entries.map(e => e.path), s, p) }} />}
       {dialog?.kind === 'share' && <ShareDialog space={space} entries={dialog.entries} initialTab={dialog.tab} onClose={() => { setDialog(null); load() }} />}
-      {dialog?.kind === 'request' && <RequestDialog space={space} path={path} folderName={crumbs.length ? crumbs[crumbs.length - 1] : spaceName} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'request' && <RequestDialog space={space} path={path} folderName={folderName} onClose={() => setDialog(null)} />}
     </div>
   )
 
   function SortHead({ k, label, cls }: { k: 'name' | 'size' | 'modified'; label: string; cls: string }) {
-    return <button className={`${cls} sort-head ${sort === k ? 'on' : ''}`} onClick={() => saveSettings(sort === k ? { sort_desc: !desc } : { sort: k, sort_desc: k !== 'name' })}>{label}{sort === k ? (desc ? ' ↓' : ' ↑') : ''}</button>
+    return <button type="button" className={`${cls} sort-head ${sort === k ? 'on' : ''}`} onClick={() => saveSettings(sort === k ? { sort_desc: !desc } : { sort: k, sort_desc: k !== 'name' })}>{label}{sort === k && <Icon name={desc ? 'arrowDown' : 'arrowUp'} size={12} />}</button>
   }
 }
