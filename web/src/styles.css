@@ -563,3 +563,5 @@ input.toggle:focus { box-shadow: 0 0 0 3px var(--accent-soft); }
 .menu button, .menu a, .ctx-menu button { display: flex; align-items: center; gap: 10px; }
 .menu .icon, .ctx-menu .icon { color: var(--muted); }
 .ctx-menu button.danger-text .icon, .menu button.danger-text .icon { color: var(--danger); }
+/* overlays rendered inside a page must not take the page's column width */
+.page > .modal-backdrop, .page > .viewer, .page > .drop-overlay, .page > .ctx-scrim, .page > .ctx-menu { max-width: none; }
