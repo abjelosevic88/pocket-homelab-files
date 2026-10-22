@@ -182,6 +182,7 @@ func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	s.baseMiddleware(r)
 
+	r.Get("/pocket-ask.js", s.core.AskWidget("files"))
 	r.Get("/healthz", s.handleHealth)
 	r.Get("/readyz", s.handleReady)
 	r.Get("/api/health", s.handleHealth)
@@ -302,6 +303,7 @@ func (s *Server) Router() http.Handler {
 func (s *Server) PublicRouter() http.Handler {
 	r := chi.NewRouter()
 	s.baseMiddleware(r)
+	r.Get("/pocket-ask.js", s.core.AskWidget("files"))
 	r.Get("/healthz", s.handleHealth)
 	r.Route("/api/v1/public", s.publicRoutes)
 	r.Post("/api/v1/client-error", s.handleClientError)
