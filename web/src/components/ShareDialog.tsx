@@ -122,7 +122,7 @@ function SendShare({ space, entries, onClose, onPeople }: { space: string; entri
 }
 
 function PeopleShare({ entry, onClose, onBack }: { entry: Entry; onClose: () => void; onBack: () => void }) {
-  const { user, bump } = useApp()
+  const { user, bump, status } = useApp()
   const { toast } = useToast()
   const [people, setPeople] = useState<Person[]>([])
   const [share, setShare] = useState<Share | null>(null)
@@ -159,7 +159,7 @@ function PeopleShare({ entry, onClose, onBack }: { entry: Entry; onClose: () => 
         {!members.length && <p className="muted small">Not shared with anyone here yet.</p>}
       </div>
       {others.length > 0 ? <Select value="" placeholder="Add a person…" label="Add a person" searchable={others.length > 5} options={others.map(p => ({ value: p.email, label: p.name || p.email, description: p.name ? p.email : undefined, keywords: p.email, icon: <Avatar user={p} size={22} /> }))} onChange={email => { const p = people.find(x => x.email === email)!; setMembers(ms => [...ms, { user_id: p.id, name: p.name, email: p.email, perm: 'view' }]) }} />
-        : !members.length && <p className="small muted">Nobody else is in this household yet (add people in Pocket Core).</p>}
+        : !members.length && <p className="small muted">Nobody else is in this household yet ({status?.core_configured ? 'add people in Pocket Core' : 'an admin adds people under Settings → People'}).</p>}
       <div className="row wrap"><span className="grow">Everyone on this box</span><Segmented size="sm" value={everyone} options={[{ value: '' as const, label: 'No' }, { value: 'view' as const, label: 'Can view' }, { value: 'edit' as const, label: 'Can edit' }]} onChange={setEveryone} /></div>
       <div className="form-actions">
         <button type="button" className="btn ghost" onClick={onBack}><Icon name="chevronLeft" size={15} /> Back</button>
