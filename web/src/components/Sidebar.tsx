@@ -33,7 +33,7 @@ export function Sidebar({ onNew, onNavigate }: { onNew: (k: NewKind) => void; on
       <div className="sb-brand">
         <img src="/favicon.svg" alt="" className="sb-logo" />
         <span className="sb-title">{title !== 'Pocket Files' ? title : <>Pocket <b>Files</b></>}</span>
-        {status?.version && <span className="sb-version" title={`Version ${status.version}`}>{/^\d/.test(status.version) ? 'v' + status.version : status.version}</span>}
+        {status?.version && <span className="sb-version" title={`Version ${status.version}`}>{/^v?\d+\.\d+/.test(status.version) ? 'v' + status.version.replace(/^v/, '').replace(/[-+].*$/, '') : status.version}</span>}
       </div>
       <button type="button" className="btn primary create-btn" aria-haspopup="menu" aria-expanded={!!menu} onClick={e => setMenu(menu ? null : rectOf(e.currentTarget))}>
         <Icon name="plus" size={17} stroke={2.2} />New<Icon name="chevronDown" size={15} className="create-caret" />
