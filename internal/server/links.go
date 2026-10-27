@@ -15,7 +15,7 @@ import (
 // Pocket app may act here for a person with a pcx_ token, only within these
 // scopes. Every route not listed in linkRoutes stays closed to it.
 //
-// This is how Pocket Office, Pocket Documents and Pocket Collaborator keep
+// This is how Pocket Office, Pocket Documents and Pocket Review keep
 // files here instead of in Nextcloud: they speak WebDAV to /dav/ with the
 // link token as the password (or a bearer token).
 

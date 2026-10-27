@@ -340,7 +340,7 @@ function WebDAV() {
           <Field label="Address" group><CopyField value={info.webdav.url} /></Field>
           <Field label="Nextcloud-style address" help="For apps that only speak Nextcloud." group><CopyField value={info.webdav.nextcloud_url} /></Field>
           <Field label="User name" group><CopyField value={info.webdav.username} mono={false} /></Field>
-          <p className="small muted">Password: an app password from below. Other Pocket apps (Office, Documents, Collaborator) connect through Pocket Core instead and need nothing from you.</p>
+          <p className="small muted">Password: an app password from below. Other Pocket apps (Office, Documents, Review) connect through Pocket Core instead and need nothing from you.</p>
         </div>}
       </Section>
       <Section title="App passwords" sub="One per device or app, so you can revoke it alone.">
@@ -516,7 +516,7 @@ function About() {
           {info.data_dir && <div><dt>Data folder</dt><dd className="mono small">{info.data_dir}</dd></div>}
         </dl>
       </Section>
-      <Section title="Pocket Core" sub="With Core, people sign in with one account and Pocket Office, Documents and Collaborator can keep files here (scopes files:read and files:write, switchable per person in Core → Links).">
+      <Section title="Pocket Core" sub="With Core, people sign in with one account and Pocket Office, Documents and Review can keep files here (scopes files:read and files:write, switchable per person in Core → Links).">
         <dl className="set-dl">
           <div><dt>Connected</dt><dd className="row"><span className={`set-status ${info.core.configured ? (info.core.registered ? 'ok' : 'warn') : ''}`} />{info.core.configured ? (info.core.registered ? 'yes' : 'not yet') : 'no'}</dd></div>
           {info.core.url && <div><dt>Address</dt><dd className="mono small">{info.core.url}</dd></div>}
