@@ -298,3 +298,13 @@
 .conflict-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; }
 .conflict-actions { flex-wrap: wrap; gap: 6px; }
 button.badge { border: 0; cursor: pointer; }
+
+/* Connected drives: details beside the buttons on wide screens, buttons under the details on phones */
+.cloud-row { flex-wrap: wrap; align-items: flex-start; row-gap: 10px; }
+.cloud-row > .grow { flex: 1 1 240px; }
+.cloud-actions { flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
+.set-person-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.set-person-name .badge { white-space: nowrap; flex: none; }
+@media (max-width: 640px) {
+  .cloud-actions { flex-basis: 100%; justify-content: flex-start; margin-left: 46px; }
+}

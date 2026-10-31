@@ -80,7 +80,7 @@ export function Clouds() {
         actions={<button type="button" className="btn primary sm" onClick={() => setAdding(true)}><Icon name="plus" size={15} /> Connect a drive</button>}>
         <div className="set-people">
           {list.map(c => (
-            <div key={c.id} className={`set-person ${c.status === 'reconnect' ? 'off' : ''}`}>
+            <div key={c.id} className={`set-person cloud-row ${c.status === 'reconnect' ? 'off' : ''}`}>
               <span className="set-token-ico" style={{ color: COLORS[c.kind] }}><Icon name="cloud" size={17} /></span>
               <div className="grow" style={{ minWidth: 0 }}>
                 <div className="set-person-name">{c.name}
@@ -93,7 +93,7 @@ export function Clouds() {
                 <div className="small muted ellipsis">{c.provider}{c.login ? ` · ${c.login}` : ''}{c.source ? ` · /${c.source}` : ''}</div>
                 <Status c={c} />
               </div>
-              <div className="row" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div className="row cloud-actions">
                 {c.status === 'reconnect' && <button type="button" className="btn primary sm" onClick={() => signInAgain(c)}>Sign in again</button>}
                 {c.conflicts > 0 && <button type="button" className="btn primary sm" onClick={() => setConflicts(c)}>Pick versions</button>}
                 {c.status === 'error' && c.error?.includes('Sync anyway') && <button type="button" className="btn sm danger-text" onClick={() => api.post(`${V1}/clouds/${c.id}/sync?force=1`).then(load).catch(e => toast((e as Error).message, 'err'))}>Sync anyway</button>}
