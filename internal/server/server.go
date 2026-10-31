@@ -64,6 +64,7 @@ type Server struct {
 	sealErr  error
 
 	clouds *cloudRunner
+	usage  usageCache
 	search *search.Index
 	office *officeCache
 }
