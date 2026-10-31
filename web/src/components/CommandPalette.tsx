@@ -7,6 +7,7 @@ import { useApp } from '../lib/app-context'
 import { currentFolder } from '../lib/here'
 import type { SearchHit, Star } from '../lib/types'
 import { Snippet } from './Snippet'
+import { CloudLogo } from './CloudLogo'
 import { FileGlyph, Icon, type IconName } from './icons'
 
 export interface PaletteCommand { id: string; label: string; icon: IconName; hint?: string; keywords?: string; run: () => void }
@@ -51,7 +52,7 @@ export function CommandPalette({ onClose, commands }: { onClose: () => void; com
     for (const s of spaces) {
       if (n && !hit(`${s.name} ${s.owner || ''} ${s.kind === 'mount' ? 'mount server' : s.kind === 'share' ? 'shared' : 'home my files'}`)) continue
       const icon: IconName = s.kind === 'home' ? 'home' : s.kind === 'mount' ? 'disk' : s.kind === 'cloud' ? 'cloud' : s.is_dir ? 'folderShared' : 'file'
-      out.push({ key: 's' + s.id, group: 'Places', icon: <Icon name={icon} size={16} />, label: s.name, sub: s.kind === 'share' ? `from ${s.owner || 'someone'}${s.perm === 'view' ? ' · view only' : ''}` : s.kind === 'mount' ? `server folder${s.perm === 'view' ? ' · view only' : ''}` : undefined, run: () => navigate(filesRoute(s.id)) })
+      out.push({ key: 's' + s.id, group: 'Places', icon: s.kind === 'cloud' ? <CloudLogo kind={s.cloud} size={16} /> : <Icon name={icon} size={16} />, label: s.name, sub: s.kind === 'share' ? `from ${s.owner || 'someone'}${s.perm === 'view' ? ' · view only' : ''}` : s.kind === 'mount' ? `server folder${s.perm === 'view' ? ' · view only' : ''}` : undefined, run: () => navigate(filesRoute(s.id)) })
     }
     for (const s of stars) {
       const name = s.entry?.name || s.path.split('/').pop() || s.path
