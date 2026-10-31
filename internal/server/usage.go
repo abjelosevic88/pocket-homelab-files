@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -12,6 +15,7 @@ import (
 
 // Adding up a folder walks every file in it, which takes seconds on a home and minutes on a media disk.
 // Totals are kept per folder and served at once; a write or age refreshes them in the background.
+// They are also saved to disk, so a restart shows the last totals while counting again.
 const (
 	usageMaxAge = 10 * time.Minute
 	// A write anywhere marks every total old; big folders wait this long before counting again.
@@ -27,6 +31,7 @@ type folderUsage struct {
 
 type usageCache struct {
 	mu       sync.Mutex
+	loaded   bool
 	byRoot   map[string]folderUsage
 	counting map[string]bool
 	slots    chan struct{} // background walks at once
@@ -37,6 +42,7 @@ type usageCache struct {
 func (s *Server) dirUsage(sp *vfs.Space, writeGap time.Duration, wait bool) (u folderUsage, known, stale bool) {
 	c := &s.usage
 	c.mu.Lock()
+	s.loadUsage()
 	u, known = c.byRoot[sp.Root]
 	age := time.Since(u.at)
 	stale = !known || age > usageMaxAge || (u.changed != s.changed.Load() && age > writeGap)
@@ -66,12 +72,64 @@ func (s *Server) countDir(sp *vfs.Space) folderUsage {
 	files, size := sp.Usage("/")
 	u := folderUsage{files: files, size: size, changed: changed, at: time.Now()}
 	s.usage.mu.Lock()
-	if s.usage.byRoot == nil {
-		s.usage.byRoot = map[string]folderUsage{}
-	}
+	s.loadUsage()
 	s.usage.byRoot[sp.Root] = u
+	s.saveUsage()
 	s.usage.mu.Unlock()
 	return u
+}
+
+type savedUsage struct {
+	Files int       `json:"files"`
+	Size  int64     `json:"size"`
+	At    time.Time `json:"at"`
+}
+
+func (s *Server) usageFile() string { return filepath.Join(s.cfg.DataDir, "space-sizes.json") }
+
+// loadUsage reads the totals saved before the last restart (once; s.usage.mu held). They count as
+// changed since, so each is served at once and counted again in the background.
+func (s *Server) loadUsage() {
+	c := &s.usage
+	if c.loaded {
+		return
+	}
+	c.loaded = true
+	if c.byRoot == nil {
+		c.byRoot = map[string]folderUsage{}
+	}
+	if s.cfg.DataDir == "" {
+		return
+	}
+	b, err := os.ReadFile(s.usageFile())
+	if err != nil {
+		return
+	}
+	var saved map[string]savedUsage
+	if json.Unmarshal(b, &saved) != nil {
+		return
+	}
+	for root, v := range saved {
+		if _, ok := c.byRoot[root]; !ok {
+			c.byRoot[root] = folderUsage{files: v.Files, size: v.Size, changed: -1, at: v.At}
+		}
+	}
+}
+
+// saveUsage writes every total to disk (s.usage.mu held).
+func (s *Server) saveUsage() {
+	if s.cfg.DataDir == "" {
+		return
+	}
+	saved := make(map[string]savedUsage, len(s.usage.byRoot))
+	for root, u := range s.usage.byRoot {
+		saved[root] = savedUsage{Files: u.files, Size: u.size, At: u.at}
+	}
+	b, _ := json.Marshal(saved)
+	tmp := s.usageFile() + ".tmp"
+	if os.WriteFile(tmp, b, 0o600) == nil {
+		_ = os.Rename(tmp, s.usageFile())
+	}
 }
 
 // homeUsage returns the person's file count and bytes, and whether a fresher count is on its way.
