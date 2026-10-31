@@ -264,6 +264,34 @@ func (r *Rclone) Check(ctx context.Context, c Config) (Config, error) {
 	return r.dump(ctx, path)
 }
 
+// Quota is what `rclone about` reports for the account; a cloud that does not say leaves a field nil.
+type Quota struct {
+	Total *int64 `json:"total"`
+	Used  *int64 `json:"used"`
+	Free  *int64 `json:"free"`
+}
+
+// About asks the cloud how much the account holds and may hold. A refreshed token is not kept:
+// the next sync refreshes its own, and saving here could race a running sync.
+func (r *Rclone) About(ctx context.Context, c Config) (Quota, error) {
+	path, done, err := r.session(c)
+	if err != nil {
+		return Quota{}, err
+	}
+	defer done()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, r.Bin, "about", Remote+":", "--json", "--config", path, "--low-level-retries", "2")
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return Quota{}, errors.New(firstNonEmpty(cleanLog(stderr.String()), err.Error()))
+	}
+	var q Quota
+	return q, json.Unmarshal(out, &q)
+}
+
 // Question is what a non-interactive `rclone config` asks next (iCloud's 2FA code).
 type Question struct {
 	State    string   `json:"State"`

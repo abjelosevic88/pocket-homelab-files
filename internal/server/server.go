@@ -65,6 +65,7 @@ type Server struct {
 
 	clouds *cloudRunner
 	usage  usageCache
+	quota  quotaCache
 	search *search.Index
 	office *officeCache
 }
