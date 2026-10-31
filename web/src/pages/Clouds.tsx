@@ -6,6 +6,7 @@ import { useApp } from '../lib/app-context'
 import { ago, bytes, stamp } from '../lib/format'
 import type { Cloud, CloudConflict, CloudKind, CloudProvider, Policy } from '../lib/types'
 import { FolderPicker } from '../components/FolderPicker'
+import { CloudLogo } from '../components/CloudLogo'
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 import { Field, Loading, Modal, Progress, Segmented, SettingRow, Toggle, useAsync, useToast } from '../components/ui'
@@ -81,7 +82,7 @@ export function Clouds() {
         <div className="set-people">
           {list.map(c => (
             <div key={c.id} className={`set-person cloud-row ${c.status === 'reconnect' ? 'off' : ''}`}>
-              <span className="set-token-ico" style={{ color: COLORS[c.kind] }}><Icon name="cloud" size={17} /></span>
+              <span className="set-token-ico" style={{ color: COLORS[c.kind] }}><CloudLogo kind={c.kind} size={17} /></span>
               <div className="grow" style={{ minWidth: 0 }}>
                 <div className="set-person-name">{c.name}
                   {c.direction === 'once' ? <span className="badge">copied once</span> : <>
@@ -188,7 +189,7 @@ function ConnectDialog({ providers, admin, onSetUp, onClose, onCreated }: { prov
               if (!x.configured) { api.get<CloudApp[]>(`${V1}/clouds/apps`).then(list => setSetup(list.find(a => a.kind === x.kind) || null)).catch(e => toast((e as Error).message, 'err')); return }
               setKind(x.kind); setName(x.kind === 'rclone' ? '' : x.name)
             }}>
-            <span className="cloud-pick-ico" style={{ color: COLORS[x.kind] }}><Icon name="cloud" size={20} /></span>
+            <span className="cloud-pick-ico" style={{ color: COLORS[x.kind] }}><CloudLogo kind={x.kind} size={20} /></span>
             <span className="cloud-pick-text">
               <b>{x.name}</b>
               <small>{x.configured ? SHORT[x.kind] : admin ? 'Not set up yet. Tap to set it up (about five minutes).' : 'Not set up yet: ask the admin of this box.'}</small>
