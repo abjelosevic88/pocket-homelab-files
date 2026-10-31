@@ -165,3 +165,13 @@ func TestCopyOnlyListedFiles(t *testing.T) {
 		t.Fatal("unlisted file copied")
 	}
 }
+
+func TestFriendlyICloud(t *testing.T) {
+	raw := errors.New(`validate2FACode failed: HTTP error 400 (400 Bad Request) returned body: "{\n \"trustedPhoneNumber\" : {\n \"pushMode\" : \"sms\" }, \"successful\" : false\n}"`)
+	if got := FriendlyICloud(raw); !strings.HasPrefix(got, "Apple did not accept that code") {
+		t.Fatal(got)
+	}
+	if got := FriendlyICloud(errors.New(`something odd: {"x": 1}`)); got != "something odd" {
+		t.Fatal(got)
+	}
+}

@@ -87,15 +87,16 @@ func providerName(kind string) string {
 
 // cloudOptions are a drive's plain settings.
 type cloudOptions struct {
-	SharedWithMe bool   `json:"shared_with_me,omitempty"` // Google Drive: also copy "Shared with me"
-	Folder       string `json:"folder,omitempty"`         // one-time copies: the folder in My files
-	Source       string `json:"source,omitempty"`         // only this folder of the cloud ("" = all of it)
-	DestSpace    string `json:"dest_space,omitempty"`     // a folder the person picked: "home" or "mount:N"
-	DestPath     string `json:"dest_path,omitempty"`
-	Direction    string `json:"direction,omitempty"` // one_way (default) | two_way
-	Conflict     string `json:"conflict,omitempty"`  // two-way: ask (default) | newer | cloud | pocket
-	Write        bool   `json:"write,omitempty"`     // the sign-in has write access
-	Ready        bool   `json:"ready,omitempty"`     // two-way: the first (union) run is done
+	SharedWithMe bool             `json:"shared_with_me,omitempty"` // Google Drive: also copy "Shared with me"
+	Folder       string           `json:"folder,omitempty"`         // one-time copies: the folder in My files
+	Source       string           `json:"source,omitempty"`         // only this folder of the cloud ("" = all of it)
+	DestSpace    string           `json:"dest_space,omitempty"`     // a folder the person picked: "home" or "mount:N"
+	DestPath     string           `json:"dest_path,omitempty"`
+	Direction    string           `json:"direction,omitempty"` // one_way (default) | two_way
+	Conflict     string           `json:"conflict,omitempty"`  // two-way: ask (default) | newer | cloud | pocket
+	Write        bool             `json:"write,omitempty"`     // the sign-in has write access
+	Ready        bool             `json:"ready,omitempty"`     // two-way: the first (union) run is done
+	Pending      *clouds.Question `json:"pending,omitempty"`   // iCloud: the question rclone asked, kept across restarts
 }
 
 // ownSpace reports whether the drive's copy is its own place ("cloud:<id>"): read-only one way,
@@ -563,7 +564,11 @@ func (s *Server) viewCloud(c *store.Cloud) cloudView {
 	} else {
 		v.Space, v.Path = "home", o.Folder
 	}
-	if q := s.clouds.question(c.ID); q != nil {
+	q := s.clouds.question(c.ID)
+	if q == nil && c.Status == "code" {
+		q = o.Pending
+	}
+	if q != nil {
 		v.Question = &clouds.Question{Name: q.Name, Help: q.Help, Error: q.Error} // the state blob stays here
 	}
 	return v
@@ -739,8 +744,13 @@ func (s *Server) handleCreateCloud(w http.ResponseWriter, r *http.Request) {
 // icloudStep runs one round of rclone's iCloud setup: sign in, then the 2FA code.
 func (s *Server) icloudStep(ctx context.Context, c *store.Cloud, cfg clouds.Config, state, answer string) error {
 	got, q, err := s.rclone().ConfigStep(ctx, cfg, state, answer)
+	// Asked which phone to text: the first trusted number (most people have one).
+	for i := 0; err == nil && q != nil && q.Name == "config_2fa_phone" && len(q.Examples) > 0 && i < 2; i++ {
+		got, q, err = s.rclone().ConfigStep(ctx, got, q.State, q.Examples[0])
+	}
 	if err != nil {
-		return err
+		s.log.Warn("icloud sign-in step failed", "cloud", c.ID, "err", err)
+		return errors.New(clouds.FriendlyICloud(err))
 	}
 	if got != nil {
 		if err := s.saveConfig(ctx, c, got); err != nil {
@@ -748,6 +758,13 @@ func (s *Server) icloudStep(ctx context.Context, c *store.Cloud, cfg clouds.Conf
 		}
 	}
 	s.clouds.setQuestion(c.ID, q)
+	if cur, err := s.store.CloudFor(ctx, c.UserID, c.ID); err == nil {
+		o := optionsOf(cur)
+		o.Pending = q
+		cur.Options = o.json()
+		_ = s.store.UpdateCloud(ctx, cur)
+		c.Options = cur.Options
+	}
 	if q != nil {
 		return s.store.SetCloudStatus(ctx, c.ID, "code", q.Error)
 	}
@@ -773,7 +790,10 @@ func (s *Server) handleCloudCode(w http.ResponseWriter, r *http.Request) {
 	_ = decode(r, &in)
 	q := s.clouds.question(c.ID)
 	if q == nil {
-		writeErr(w, http.StatusConflict, "nothing is waiting for a code; connect again")
+		q = optionsOf(c).Pending // asked before a restart
+	}
+	if q == nil {
+		writeErr(w, http.StatusConflict, "nothing is waiting for a code; sign in again")
 		return
 	}
 	cfg, err := s.runtimeConfig(c)

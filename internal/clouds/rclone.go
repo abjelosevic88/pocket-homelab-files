@@ -266,10 +266,11 @@ func (r *Rclone) Check(ctx context.Context, c Config) (Config, error) {
 
 // Question is what a non-interactive `rclone config` asks next (iCloud's 2FA code).
 type Question struct {
-	State string `json:"State"`
-	Name  string `json:"name"`
-	Help  string `json:"help"`
-	Error string `json:"error,omitempty"`
+	State    string   `json:"State"`
+	Name     string   `json:"name"`
+	Help     string   `json:"help"`
+	Error    string   `json:"error,omitempty"`
+	Examples []string `json:"examples,omitempty"` // the values a choice question offers (iCloud: which phone)
 }
 
 // ConfigStep runs `rclone config create` (state == "") or `update --continue` with an answer.
@@ -302,8 +303,11 @@ func (r *Rclone) ConfigStep(ctx context.Context, c Config, state, answer string)
 	var out struct {
 		State  string `json:"State"`
 		Option *struct {
-			Name string `json:"Name"`
-			Help string `json:"Help"`
+			Name     string `json:"Name"`
+			Help     string `json:"Help"`
+			Examples []struct {
+				Value string `json:"Value"`
+			} `json:"Examples"`
 		} `json:"Option"`
 		Error string `json:"Error"`
 	}
@@ -314,7 +318,11 @@ func (r *Rclone) ConfigStep(ctx context.Context, c Config, state, answer string)
 		help, _, _ := strings.Cut(out.Option.Help, "\n")
 		// The half-made remote is needed to continue; keep it with the question.
 		partial, _ := r.dump(ctx, path)
-		return partial, &Question{State: out.State, Name: out.Option.Name, Help: help, Error: out.Error}, nil
+		q := &Question{State: out.State, Name: out.Option.Name, Help: help, Error: out.Error}
+		for _, e := range out.Option.Examples {
+			q.Examples = append(q.Examples, e.Value)
+		}
+		return partial, q, nil
 	}
 	if out.Error != "" {
 		return nil, nil, errors.New(out.Error)
@@ -360,4 +368,31 @@ func last(list []string) string {
 		return ""
 	}
 	return list[len(list)-1]
+}
+
+// FriendlyICloud turns rclone's iCloud errors (which can carry Apple's whole JSON reply) into
+// one sentence a person can act on.
+func FriendlyICloud(err error) string {
+	msg := err.Error()
+	low := strings.ToLower(msg)
+	switch {
+	case strings.Contains(low, "validate2facode"), strings.Contains(low, "validatesmscode"), strings.Contains(low, "securitycode"):
+		return "Apple did not accept that code. Use the newest code (an older one stops working when a new one is sent), or get one by text message."
+	case strings.Contains(low, "2fa codes can't be blank"):
+		return "Enter the six-digit code Apple sent."
+	case strings.Contains(low, "invalid") && (strings.Contains(low, "password") || strings.Contains(low, "apple id")),
+		strings.Contains(low, "401") && strings.Contains(low, "signin"):
+		return "Apple did not accept the Apple ID or password."
+	case strings.Contains(low, "zone_not_found"), strings.Contains(low, "advanced data protection"), strings.Contains(low, "pcs"):
+		return "iCloud Drive is not reachable this way: turn off Advanced Data Protection and turn on “Access iCloud Data on the Web” (Settings → your name → iCloud), then try again."
+	case strings.Contains(low, "no trusted phone"):
+		return "This Apple ID has no trusted phone number for text messages; use the code shown on your Apple devices."
+	}
+	if i := strings.IndexAny(msg, "{["); i > 0 {
+		msg = strings.TrimRight(strings.TrimSpace(msg[:i]), ":")
+	}
+	if len(msg) > 240 {
+		msg = msg[:240] + "…"
+	}
+	return msg
 }

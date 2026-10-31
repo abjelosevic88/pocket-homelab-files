@@ -244,19 +244,30 @@ function CodeDialog({ cloud, onClose, onDone }: { cloud: Cloud; onClose: () => v
   const { toast } = useToast()
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
-  const send = async () => {
-    setBusy(true)
+  const [help, setHelp] = useState(cloud.question?.help || '')
+  const [err, setErr] = useState('')
+  const send = async (answer: string) => {
+    setBusy(true); setErr('')
     try {
-      const c = await api.post<Cloud>(`${V1}/clouds/${cloud.id}/code`, { code })
-      if (c.question) { toast(c.question.error || 'Apple asks again; enter the new code.', 'err'); setCode(''); setBusy(false); return }
-      toast('Connected. The first copy is running.'); onDone()
-    } catch (e) { toast((e as Error).message, 'err'); setBusy(false) }
+      const c = await api.post<Cloud>(`${V1}/clouds/${cloud.id}/code`, { code: answer })
+      if (c.question) {
+        // Apple asks again: a text message was sent, or it wants a fresh code.
+        setHelp(c.question.help); setCode(''); setBusy(false)
+        if (c.question.error) setErr(c.question.error)
+        return
+      }
+      toast('Connected. The first sync is running.'); onDone()
+    } catch (e) { setErr((e as Error).message); setCode(''); setBusy(false) }
   }
+  const text = help && !/apple devices|2fa code/i.test(help) ? help : 'Enter the six-digit code Apple shows on your iPhone, iPad or Mac.'
   return (
-    <Modal title={`Code for ${cloud.name}`} size="sm" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>Later</button><button type="button" className="btn primary" disabled={code.trim().length < 6 || busy} onClick={send}>Connect</button></>}>
+    <Modal title={`Code for ${cloud.name}`} size="sm" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>Later</button><button type="button" className="btn primary" disabled={code.trim().length < 6 || busy} onClick={() => send(code)}>{busy ? 'Checking…' : 'Connect'}</button></>}>
       <div className="stack">
-        <p className="small muted">{cloud.question?.help || 'Enter the six-digit code Apple shows on your iPhone, iPad or Mac.'}</p>
-        <Field label="Code"><input inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={e => { if (e.key === 'Enter' && code.length >= 6) send() }} placeholder="123456" /></Field>
+        <p className="small muted">{text}</p>
+        <Field label="Code"><input inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={e => { if (e.key === 'Enter' && code.length >= 6) send(code) }} placeholder="123456" /></Field>
+        {err && <div className="callout danger"><Icon name="info" size={15} /><span>{err}</span></div>}
+        <button type="button" className="btn ghost sm" disabled={busy} onClick={() => send('sms')} style={{ justifySelf: 'start' }}>Text me a code instead</button>
+        <p className="small muted">Use the newest code: each new sign-in or text makes the earlier codes stop working.</p>
       </div>
     </Modal>
   )
