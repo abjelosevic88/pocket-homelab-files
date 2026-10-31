@@ -387,3 +387,8 @@ input.bare, textarea.bare { border-color: transparent; background: transparent; 
 .office-frame-msg { margin: auto; display: flex; gap: 10px; align-items: center; color: var(--muted); padding: 24px; }
 .office-frame-tab { position: absolute; right: 10px; bottom: 10px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--panel, #fff); color: var(--muted); box-shadow: 0 1px 4px rgba(0,0,0,.18); opacity: .6; }
 .office-frame-tab:hover { opacity: 1; }
+
+/* Grid and flex items default to min-width: auto, so one long unbroken string (a client ID, a path)
+   would widen the whole card past a phone's screen; let them shrink and truncate instead. */
+.stack > *, .set-section, .set-section-head > .grow, .set-section-body, .set-people, .set-person > .grow { min-width: 0; }
+.set-person .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

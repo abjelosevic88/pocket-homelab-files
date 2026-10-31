@@ -27,6 +27,10 @@ async function request<T>(method: string, url: string, body?: unknown, raw = fal
       data = await res.json()
       msg = (data.error as string) || msg
     } catch {}
+    if (!msg || !msg.trim()) {
+      // Proxies answer 502–504 with no body while the app restarts (HTTP/2 has no status text either).
+      msg = res.status >= 502 && res.status <= 504 ? 'Pocket Files is restarting. Try again in a moment.' : `Request failed (${res.status})`
+    }
     throw new ApiError(res.status, msg, data)
   }
   if (raw) return (await res.text()) as unknown as T

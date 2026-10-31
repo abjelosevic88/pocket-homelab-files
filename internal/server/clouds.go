@@ -303,6 +303,14 @@ func (cr *cloudRunner) stop(id int64) bool {
 // loop starts scheduled drives when they are due.
 func (cr *cloudRunner) loop(ctx context.Context) {
 	cr.s.store.ResetSyncingClouds(ctx)
+	// Config files of runs cut short by a restart hold sign-ins: never leave them lying around.
+	for _, pat := range []string{"remote-*.conf", "excludes-*.txt", "files-*.txt"} {
+		if old, _ := filepath.Glob(filepath.Join(cr.s.cfg.DataDir, "rclone", pat)); len(old) > 0 {
+			for _, f := range old {
+				_ = os.Remove(f)
+			}
+		}
+	}
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	lastPrune := time.Time{}
