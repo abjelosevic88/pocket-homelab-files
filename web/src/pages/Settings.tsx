@@ -23,7 +23,7 @@ const TABS: { id: TabId; label: string; icon: IconName; sub: string; admin?: boo
   { id: 'alerts', label: 'Notifications', icon: 'bell', sub: 'A push when a link of yours is downloaded or files arrive through an upload link.' },
   { id: 'email', label: 'Email', icon: 'mail', sub: 'Your own mail account for emailing links, and the wording of those emails.' },
   { id: 'webdav', label: 'WebDAV & apps', icon: 'key', sub: 'Mount your drive in Finder, Explorer or Files on iPhone; app passwords for it.' },
-  { id: 'clouds', label: 'Connected drives', icon: 'cloud', sub: 'Copy Google Drive, Dropbox, OneDrive, iCloud Drive or any rclone remote into Pocket Files, on a schedule or once.' },
+  { id: 'clouds', label: 'Connected drives', icon: 'cloud', sub: 'Sync Google Drive, Dropbox, OneDrive, iCloud Drive or any rclone remote with Pocket Files: two-way, one-way or once.' },
   { id: 'mounts', label: 'Mounts', icon: 'disk', sub: 'Server folders shown in the sidebar for the people you pick.', admin: true },
   { id: 'people', label: 'People', icon: 'users', sub: 'Everyone who has an account on this box.', admin: true },
   { id: 'about', label: 'About', icon: 'info', sub: 'Version, storage, the share listener and Pocket Core.' },
