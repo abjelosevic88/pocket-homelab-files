@@ -24,6 +24,11 @@ var linkOffers = []core.Offer{
 	{Scope: "files:write", Name: "Save your files", Description: "Upload, change, move and delete files in your folders (Pocket Office saves documents back, Pocket Documents files your archive)."},
 }
 
+// linkUses: Pocket Office edits the documents kept here ("Open in Pocket Office").
+var linkUses = []core.Use{
+	{App: "office", Scopes: []string{"office:open"}, Reason: "Offer “Open in Pocket Office” on Word, Excel and PowerPoint files, once Pocket Office can reach your files"},
+}
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp

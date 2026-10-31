@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Snippet } from '../components/Snippet'
+import { OfficeFrame } from '../components/OfficeFrame'
+import { isOfficeDoc, useOffice } from '../lib/office'
 import { api, filesRoute, qs, rawURL, thumbURL, V1, zipURL } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { ago, bytes, plural, stamp } from '../lib/format'
@@ -43,6 +45,9 @@ export default function Browser() {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [menu, setMenu] = useState<{ at: Anchor; align: 'left' | 'right'; entry: Entry } | null>(null)
   const [preview, setPreview] = useState<number | null>(null)
+  const [officeDoc, setOfficeDoc] = useState<Entry | null>(null)
+  const office = useOffice()
+  const inOffice = (e: Entry) => office.available && isOfficeDoc(e, space)
   const [dragOver, setDragOver] = useState(false)
   const [dropFolder, setDropFolder] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
@@ -106,13 +111,15 @@ export default function Browser() {
     const open = params.get('open')
     if (!open || !data) return
     const i = files.findIndex(f => f.name === open)
-    if (i >= 0) setPreview(i)
+    if (i >= 0 && inOffice(files[i])) setOfficeDoc(files[i])
+    else if (i >= 0) setPreview(i)
     setParams(p => { const n = new URLSearchParams(p); n.delete('open'); return n }, { replace: true })
   }, [data, params]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const open = (e: Entry) => {
     if (e.is_dir) { navigate(filesRoute(space, e.path)); return }
     if (results) { navigate(filesRoute(space, e.path.split('/').slice(0, -1).join('/') || '/') + `?open=${encodeURIComponent(e.name)}`); return }
+    if (inOffice(e)) { setOfficeDoc(e); return }
     setPreview(files.indexOf(e))
   }
 
@@ -207,7 +214,8 @@ export default function Browser() {
   const actionsFor = (list: Entry[]): MenuItem[] => {
     const one = list.length === 1 ? list[0] : null
     const items: MenuItem[] = []
-    if (one && !one.is_dir && previewKind(one) !== 'none') items.push({ label: 'Open', icon: 'eye', onSelect: () => open(one) })
+    if (one && inOffice(one)) items.push({ label: 'Edit in Pocket Office', icon: 'edit', onSelect: () => setOfficeDoc(one) })
+    if (one && !one.is_dir && previewKind(one) !== 'none') items.push({ label: inOffice(one) ? 'Preview' : 'Open', icon: 'eye', onSelect: () => setPreview(files.indexOf(one)) })
     if (one?.is_dir) items.push({ label: 'Open', icon: 'folder', onSelect: () => open(one) })
     items.push({ label: one && !one.is_dir ? 'Download' : 'Download as zip', icon: 'download', onSelect: () => download(list) })
     items.push({ label: 'Share…', icon: 'send', onSelect: () => setDialog({ kind: 'share', entries: list }) })
@@ -348,6 +356,7 @@ export default function Browser() {
 
       {menu && <Menu anchor={menu.at} align={menu.align} width={220} onClose={() => setMenu(null)} items={actionsFor(sel.has(menu.entry.path) && sel.size > 1 ? selected : [menu.entry])} />}
 
+      {officeDoc && <OfficeFrame space={space} entry={officeDoc} onClose={() => { setOfficeDoc(null); load() }} />}
       {preview !== null && files[preview] && <Preview space={space} entries={files} index={preview} writable={writable} onClose={() => setPreview(null)} onIndex={setPreview} onSaved={load}
         actions={e => <>
           <button type="button" className="icon-btn" onClick={() => star(e)} title={e.starred ? 'Remove star' : 'Star'}><Icon name="star" size={16} fill={e.starred} className={e.starred ? 'star-on' : ''} /></button>

@@ -65,6 +65,7 @@ type Server struct {
 
 	clouds *cloudRunner
 	search *search.Index
+	office *officeCache
 }
 
 // New creates a server.
@@ -75,6 +76,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 	s.oidc = &oidcProvider{issuerURL: cfg.OIDCIssuer}
 	s.pending = newNotifyQueue(s)
 	s.clouds = newCloudRunner(s)
+	s.office = &officeCache{m: map[int64]officeEntry{}}
 	return s
 }
 
@@ -242,6 +244,8 @@ func (s *Server) Router() http.Handler {
 				r.Post("/fs/rename", s.handleRename)
 				r.Post("/fs/delete", s.handleDelete)
 				r.Get("/fs/search", s.handleSearch)
+				r.Get("/office", s.handleOfficeStatus)
+				r.Get("/office/open", s.handleOfficeOpen)
 				r.Get("/search", s.handleGlobalSearch)
 				r.Get("/search/status", s.handleSearchStatus)
 				r.Post("/search/rebuild", s.handleSearchRebuild)
@@ -475,6 +479,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "FILES",
 		Publishes: []string{"files.uploaded", "files.deleted", "files.shared", "files.send_created", "files.send_downloaded", "files.request_received"},
 		Offers:    linkOffers,
+		Uses:      linkUses,
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.cfg.BaseURL + "/api/v1/auth/oidc/callback"}}
