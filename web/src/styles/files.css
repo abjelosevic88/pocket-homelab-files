@@ -174,7 +174,8 @@
 .viewer-head .icon-btn { color: #ccc; }
 .viewer-head .icon-btn:hover { background: rgba(255, 255, 255, .1); color: #fff; }
 .viewer-head small, .viewer-head .muted { color: #aaa; }
-.viewer-body { flex: 1; min-height: 0; display: grid; place-items: center; position: relative; padding: 16px 64px; }
+/* One cell exactly the size of the body: a tall video then shrinks to fit instead of pushing its controls off screen. */
+.viewer-body { flex: 1; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; position: relative; padding: 16px 64px; }
 .viewer-body img, .viewer-body video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; box-shadow: 0 10px 40px rgba(0, 0, 0, .5); }
 .viewer-body iframe { width: 100%; height: 100%; border: 0; background: #fff; border-radius: 6px; }
 .viewer-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .1); color: #fff; display: grid; place-items: center; cursor: pointer; }
