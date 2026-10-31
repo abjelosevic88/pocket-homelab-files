@@ -14,6 +14,15 @@ import { Section } from './Settings'
 const INTERVALS = [1, 6, 12, 24, 168].map(h => ({ value: h, label: h === 1 ? 'Every hour' : h === 24 ? 'Every day' : h === 168 ? 'Every week' : `Every ${h} hours` }))
 const COLORS: Record<CloudKind, string> = { gdrive: '#1a73e8', dropbox: '#0061fe', onedrive: '#0078d4', icloud: '#3b82f6', rclone: '#64748b' }
 
+// One line per drive in the list; the full help shows on the next step.
+const SHORT: Record<CloudKind, string> = {
+  gdrive: 'Sign in with Google, read-only.',
+  dropbox: 'Sign in with Dropbox, read-only.',
+  onedrive: 'Sign in with Microsoft, read-only.',
+  icloud: 'Apple ID and password, then a code on your devices.',
+  rclone: 'S3, SFTP, WebDAV, pCloud, Mega, Box… any rclone remote.',
+}
+
 type Providers = { providers: CloudProvider[]; rclone: string; rclone_error?: string; redirect: string }
 
 export function Clouds() {
@@ -151,12 +160,15 @@ function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers
 
   if (!p) return (
     <Modal title="Connect a drive" onClose={onClose}>
-      <div className="picker-list">
+      <div className="cloud-pick">
         {providers.providers.map(x => (
-          <button type="button" key={x.kind} className="pick-row" disabled={!x.configured} onClick={() => { setKind(x.kind); setName(x.kind === 'rclone' ? '' : x.name) }}>
-            <span style={{ color: COLORS[x.kind] }}><Icon name="cloud" size={17} /></span>
-            <span className="grow" style={{ textAlign: 'left' }}><b>{x.name}</b><br /><small className="muted">{x.configured ? x.help : 'Not set up on this box yet: the admin adds its OAuth client (docs/clouds.md).'}</small></span>
-            <Icon name="chevronRight" size={15} />
+          <button type="button" key={x.kind} className="cloud-pick-row" disabled={!x.configured} onClick={() => { setKind(x.kind); setName(x.kind === 'rclone' ? '' : x.name) }}>
+            <span className="cloud-pick-ico" style={{ color: COLORS[x.kind] }}><Icon name="cloud" size={20} /></span>
+            <span className="cloud-pick-text">
+              <b>{x.name}</b>
+              <small>{x.configured ? SHORT[x.kind] : 'Not set up on this box yet: the admin adds its sign-in app (docs/clouds.md).'}</small>
+            </span>
+            {x.configured && <Icon name="chevronRight" size={16} className="muted" />}
           </button>
         ))}
       </div>
@@ -172,6 +184,13 @@ function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers
       <div className="stack">
         <p className="small muted">{p.help}</p>
         <Field label="Name"><input value={name} onChange={e => setName(e.target.value)} placeholder={p.name} /></Field>
+        {(p.fields || []).map(f => (
+          <Field key={f.key} label={f.label}>
+            {f.multiline
+              ? <textarea className="mono" rows={7} value={fields[f.key] || ''} placeholder={f.placeholder} onChange={e => setFields({ ...fields, [f.key]: e.target.value })} />
+              : <input type={f.secret ? 'password' : 'text'} autoComplete="off" value={fields[f.key] || ''} placeholder={f.placeholder} onChange={e => setFields({ ...fields, [f.key]: e.target.value })} />}
+          </Field>
+        ))}
         <Field label="How" group><Segmented size="sm" value={mode} onChange={setMode} options={[{ value: 'sync' as const, label: 'Keep in sync' }, { value: 'once' as const, label: 'Copy once' }]} /></Field>
         {mode === 'sync' && <SettingRow title="How often" help="New and changed files come in on this schedule."><Select value={interval} options={INTERVALS} onChange={setInterval_} label="How often" /></SettingRow>}
         <Field label="Where" group>
@@ -183,13 +202,6 @@ function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers
           : mode === 'sync' ? 'A read-only place under Drives in the sidebar, kept exactly like the cloud.' : 'Everything is copied once into a new folder in My files, where you can edit, move and share it like your own files.'}</p>
         {p.kind === 'gdrive' && <SettingRow title="Also “Shared with me”" help="Files others shared with you, in a folder of their own. Can be many small files."><Toggle checked={shared} onChange={setShared} label="Also Shared with me" /></SettingRow>}
         <Field label="Only this folder (optional)" help="A folder inside the cloud, like Photos/2024. Empty copies everything."><input value={source} onChange={e => setSource(e.target.value)} placeholder="Everything" /></Field>
-        {(p.fields || []).map(f => (
-          <Field key={f.key} label={f.label}>
-            {f.multiline
-              ? <textarea className="mono" rows={7} value={fields[f.key] || ''} placeholder={f.placeholder} onChange={e => setFields({ ...fields, [f.key]: e.target.value })} />
-              : <input type={f.secret ? 'password' : 'text'} autoComplete="off" value={fields[f.key] || ''} placeholder={f.placeholder} onChange={e => setFields({ ...fields, [f.key]: e.target.value })} />}
-          </Field>
-        ))}
         {busy && p.auth === 'form' && <p className="small muted">Checking the connection…</p>}
       </div>
       {picking && <FolderPicker title={`Where should ${name || p.name} go?`} button="Use this folder" kinds={['home', 'mount']} startSpace={dest?.space || 'home'} startPath={dest?.path || '/'}
