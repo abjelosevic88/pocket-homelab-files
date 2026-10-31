@@ -122,7 +122,10 @@
 .mini-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: var(--surface-2); }
 .shared-pill { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, #8b5cf6 15%, transparent); color: #7c3aed; flex-shrink: 0; }
 [data-theme="dark"] .shared-pill { color: #c4b5fd; }
-.file-foot { padding: 9px 14px; border-top: 1px solid var(--hairline); background: var(--surface-2); }
+.file-foot { padding: 9px 14px; border-top: 1px solid var(--hairline); background: var(--surface-2); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.disk-usage { display: inline-flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+.disk-usage .bar { width: 72px; height: 4px; }
+.grid-foot { margin-top: 12px; display: flex; justify-content: flex-end; }
 
 .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 12px; }
 .file-card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 8px; cursor: pointer; user-select: none; display: grid; gap: 4px; transition: border-color .12s, box-shadow .12s, transform .1s; }

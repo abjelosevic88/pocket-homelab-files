@@ -327,7 +327,10 @@ export default function Browser() {
               </span>
             </div>
           ))}
-          <div className="file-foot muted small">{plural(entries.filter(e => e.is_dir).length, 'folder')} · {plural(files.length, 'file')} · {bytes(files.reduce((s, f) => s + f.size, 0))}</div>
+          <div className="file-foot muted small">
+            <span className="grow">{plural(entries.filter(e => e.is_dir).length, 'folder')} · {plural(files.length, 'file')} · {bytes(files.reduce((s, f) => s + f.size, 0))}</span>
+            {data?.disk && <DiskUsage disk={data.disk} />}
+          </div>
         </div>
       )}
 
@@ -351,6 +354,7 @@ export default function Browser() {
           ))}
         </div>
       )}
+      {entries.length > 0 && view === 'grid' && data?.disk && <div className="grid-foot muted small"><DiskUsage disk={data.disk} /></div>}
 
       {dragOver && <div className="drop-overlay"><div><Icon name="upload" size={36} /><h2>Drop to upload</h2><p>into <b>{folderName}</b></p></div></div>}
 
@@ -381,4 +385,15 @@ export default function Browser() {
   function SortHead({ k, label, cls }: { k: 'name' | 'size' | 'modified'; label: string; cls: string }) {
     return <button type="button" className={`${cls} sort-head ${sort === k ? 'on' : ''}`} onClick={() => saveSettings(sort === k ? { sort_desc: !desc } : { sort: k, sort_desc: k !== 'name' })}>{label}{sort === k && <Icon name={desc ? 'arrowDown' : 'arrowUp'} size={12} />}</button>
   }
+}
+
+/** How full the server disk under a mount is. */
+function DiskUsage({ disk }: { disk: { free: number; total: number } }) {
+  const used = disk.total - disk.free
+  return (
+    <span className="disk-usage" title={`${bytes(used)} used of ${bytes(disk.total)} on this disk · ${bytes(disk.free)} free`}>
+      <span className="bar"><span className="fill" style={{ width: Math.min(100, used / disk.total * 100) + '%' }} /></span>
+      Disk: {bytes(disk.free)} free of {bytes(disk.total)}
+    </span>
+  )
 }

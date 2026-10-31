@@ -9,7 +9,7 @@ export interface Space { id: string; kind: 'home' | 'mount' | 'share' | 'cloud';
 
 export interface Entry { name: string; path: string; is_dir: boolean; size: number; modified: string; mime: string; starred?: boolean; shared?: number; match?: 'name' | 'content'; snippet?: string }
 export interface SearchHit { space: string; path: string; name: string; folder: string; is_dir: boolean; size: number; modified: string; ext?: string; match: 'name' | 'content'; snippet?: string }
-export interface Listing { space: Space; path: string; entry: Entry; entries: Entry[]; writable: boolean }
+export interface Listing { space: Space; path: string; entry: Entry; entries: Entry[]; writable: boolean; disk?: { free: number; total: number } }
 
 export interface Access { user_id: number; name?: string; email?: string; perm: Perm }
 export interface Share { id: number; owner_id: number; owner_name: string; owner_email: string; path: string; is_dir: boolean; everyone_perm: '' | Perm; note: string; created_at: string; members?: Access[]; perm?: Perm; space?: string; name?: string }
