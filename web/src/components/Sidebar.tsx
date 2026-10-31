@@ -28,6 +28,7 @@ export function Sidebar({ onNew, onNavigate }: { onNew: (k: NewKind) => void; on
     load(true)
     return () => { gone = true; clearTimeout(timer) }
   }, [version, usageKey])
+  const sizes = useSpaceSizes(user?.id, version, spaces.length)
   const title = settings?.title || status?.title || 'Pocket Files'
   const mounts = spaces.filter(s => s.kind === 'mount')
   const shared = spaces.filter(s => s.kind === 'share')
@@ -62,8 +63,8 @@ export function Sidebar({ onNew, onNavigate }: { onNew: (k: NewKind) => void; on
         ))}
       </nav>
 
-      {mounts.length > 0 && <SpaceGroup title="Mounts" list={mounts} onNavigate={onNavigate} />}
-      {drives.length > 0 && <SpaceGroup title="Drives" list={drives} onNavigate={onNavigate} />}
+      {mounts.length > 0 && <SpaceGroup title="Mounts" list={mounts} sizes={sizes ?? undefined} onNavigate={onNavigate} />}
+      {drives.length > 0 && <SpaceGroup title="Drives" list={drives} sizes={sizes ?? undefined} onNavigate={onNavigate} />}
       {shared.length > 0 && <SpaceGroup title="Shared with me" list={shared} onNavigate={onNavigate} limit={12} />}
 
       {info && <div className="sb-usage" title={`${bytes(info.home.size)} in ${info.home.files} files · ${bytes(info.disk.free)} free on the server`}>
@@ -78,7 +79,7 @@ export function Sidebar({ onNew, onNavigate }: { onNew: (k: NewKind) => void; on
   )
 }
 
-function SpaceGroup({ title, list, onNavigate, limit = 0 }: { title: string; list: Space[]; onNavigate: () => void; limit?: number }) {
+function SpaceGroup({ title, list, sizes, onNavigate, limit = 0 }: { title: string; list: Space[]; sizes?: SpaceSizes; onNavigate: () => void; limit?: number }) {
   const [open, setOpen] = useState(true)
   const shown = limit ? list.slice(0, limit) : list
   return (
@@ -87,14 +88,14 @@ function SpaceGroup({ title, list, onNavigate, limit = 0 }: { title: string; lis
         <button type="button" className="sb-h-btn" aria-expanded={open} onClick={() => setOpen(o => !o)}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={13} />{title}</button>
       </h4>
       {open && <ul className="cal-list">
-        {shown.map(s => <SpaceRow key={s.id} space={s} onNavigate={onNavigate} />)}
+        {shown.map(s => <SpaceRow key={s.id} space={s} size={sizes?.[s.id]?.size} onNavigate={onNavigate} />)}
         {limit > 0 && list.length > limit && <li><Link to="/shared" className="sb-more" onClick={onNavigate}>All {list.length} shared…</Link></li>}
       </ul>}
     </section>
   )
 }
 
-function SpaceRow({ space, onNavigate }: { space: Space; onNavigate: () => void }) {
+function SpaceRow({ space, size, onNavigate }: { space: Space; size?: number; onNavigate: () => void }) {
   const loc = useLocation()
   const to = filesRoute(space.id)
   let active = false
@@ -107,7 +108,27 @@ function SpaceRow({ space, onNavigate }: { space: Space; onNavigate: () => void 
         <span className="cal-name ellipsis">{space.name}</span>
         {space.perm === 'view' && space.kind !== 'cloud' && <span className="space-flag" title="View only"><Icon name="lock" size={12} /></span>}
         {space.owner && <span className="space-owner ellipsis">{space.owner}</span>}
+        {size !== undefined && <span className="sb-count space-size" title={`${bytes(size)} in ${space.name}`}>{bytes(size)}</span>}
       </NavLink>
     </li>
   )
+}
+
+type SpaceSizes = Record<string, { files: number; size: number }>
+
+/** What each mount and drive holds: the last totals at once, then the server's, asking again while it counts. */
+function useSpaceSizes(uid: number | undefined, version: unknown, count: number) {
+  const key = `pf-space-sizes-${uid ?? ''}`
+  const [sizes, setSizes] = useState<SpaceSizes | null>(() => { try { return JSON.parse(localStorage.getItem(key) || 'null') } catch { return null } })
+  useEffect(() => {
+    let timer = 0, gone = false, tries = 0
+    const load = () => api.get<{ sizes: SpaceSizes; pending: boolean }>(`${V1}/spaces/sizes`).then(r => {
+      if (gone) return
+      setSizes(r.sizes); localStorage.setItem(key, JSON.stringify(r.sizes))
+      if (r.pending && ++tries < 60) timer = window.setTimeout(load, 5000)
+    }).catch(() => {})
+    load()
+    return () => { gone = true; clearTimeout(timer) }
+  }, [key, version, count])
+  return sizes
 }

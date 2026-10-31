@@ -237,6 +237,7 @@ func (s *Server) Router() http.Handler {
 				r.Get("/changes", s.handleChanges)
 
 				r.Get("/spaces", s.handleSpaces)
+				r.Get("/spaces/sizes", s.handleSpaceSizes)
 				r.Get("/fs/list", s.handleList)
 				r.Get("/fs/stat", s.handleStat)
 				r.Post("/fs/mkdir", s.handleMkdir)

@@ -1,15 +1,22 @@
 package server
 
 import (
+	"net/http"
 	"sync"
 	"time"
+
+	"github.com/abjelosevic88/pocket-homelab-files/internal/vfs"
 )
 
-// Adding up a home folder walks every file in it, which takes seconds on a big one.
-// The total is kept per person and served at once; a write or age refreshes it in the background.
-const usageMaxAge = 5 * time.Minute
+// Adding up a folder walks every file in it, which takes seconds on a home and minutes on a media disk.
+// Totals are kept per folder and served at once; a write or age refreshes them in the background.
+const (
+	usageMaxAge = 10 * time.Minute
+	// A write anywhere marks every total old; big folders wait this long before counting again.
+	usageWriteGap = time.Minute
+)
 
-type homeUsage struct {
+type folderUsage struct {
 	files   int
 	size    int64
 	changed int64 // s.changed when it was counted
@@ -18,44 +25,91 @@ type homeUsage struct {
 
 type usageCache struct {
 	mu       sync.Mutex
-	byUser   map[int64]homeUsage
-	counting map[int64]bool
+	byRoot   map[string]folderUsage
+	counting map[string]bool
+	slots    chan struct{} // background walks at once
 }
 
-// homeUsage returns the person's file count and bytes, and whether a fresher count is on its way.
-func (s *Server) homeUsage(uid int64) (files int, size int64, stale bool) {
+// dirUsage returns a folder's totals, whether they are known, and whether a fresher count is on its way.
+// With wait, an unknown folder is counted now; otherwise it is counted in the background.
+func (s *Server) dirUsage(sp *vfs.Space, writeGap time.Duration, wait bool) (u folderUsage, known, stale bool) {
 	c := &s.usage
 	c.mu.Lock()
-	u, ok := c.byUser[uid]
-	stale = ok && (u.changed != s.changed.Load() || time.Since(u.at) > usageMaxAge)
-	if ok && stale && !c.counting[uid] {
+	u, known = c.byRoot[sp.Root]
+	age := time.Since(u.at)
+	stale = !known || age > usageMaxAge || (u.changed != s.changed.Load() && age > writeGap)
+	if stale && (known || !wait) && !c.counting[sp.Root] {
 		if c.counting == nil {
-			c.counting = map[int64]bool{}
+			c.counting, c.slots = map[string]bool{}, make(chan struct{}, 2)
 		}
-		c.counting[uid] = true
+		c.counting[sp.Root] = true
 		go func() {
-			s.countHome(uid)
+			c.slots <- struct{}{}
+			s.countDir(sp)
+			<-c.slots
 			c.mu.Lock()
-			delete(c.counting, uid)
+			delete(c.counting, sp.Root)
 			c.mu.Unlock()
 		}()
 	}
 	c.mu.Unlock()
-	if !ok {
-		u = s.countHome(uid)
+	if !known && wait {
+		u, known, stale = s.countDir(sp), true, false
 	}
+	return u, known, stale
+}
+
+func (s *Server) countDir(sp *vfs.Space) folderUsage {
+	changed := s.changed.Load()
+	files, size := sp.Usage("/")
+	u := folderUsage{files: files, size: size, changed: changed, at: time.Now()}
+	s.usage.mu.Lock()
+	if s.usage.byRoot == nil {
+		s.usage.byRoot = map[string]folderUsage{}
+	}
+	s.usage.byRoot[sp.Root] = u
+	s.usage.mu.Unlock()
+	return u
+}
+
+// homeUsage returns the person's file count and bytes, and whether a fresher count is on its way.
+func (s *Server) homeUsage(uid int64) (files int, size int64, stale bool) {
+	u, _, stale := s.dirUsage(s.homeSpace(uid), 0, true)
 	return u.files, u.size, stale
 }
 
-func (s *Server) countHome(uid int64) homeUsage {
-	changed := s.changed.Load()
-	files, size := s.homeSpace(uid).Usage("/")
-	u := homeUsage{files: files, size: size, changed: changed, at: time.Now()}
-	s.usage.mu.Lock()
-	if s.usage.byUser == nil {
-		s.usage.byUser = map[int64]homeUsage{}
+type spaceSize struct {
+	Files int   `json:"files"`
+	Size  int64 `json:"size"`
+}
+
+// handleSpaceSizes reports how much each mount and connected drive in the sidebar holds.
+// Folders not counted yet are left out and pending is set; the sidebar asks again shortly.
+func (s *Server) handleSpaceSizes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	uid := me(r)
+	var spaces []*vfs.Space
+	if mounts, err := s.store.MountsFor(ctx, uid); err == nil {
+		for i := range mounts {
+			if sp, err := s.mountSpace(&mounts[i]); err == nil {
+				spaces = append(spaces, sp)
+			}
+		}
 	}
-	s.usage.byUser[uid] = u
-	s.usage.mu.Unlock()
-	return u
+	if clouds, err := s.store.CloudsFor(ctx, uid); err == nil {
+		for i := range clouds {
+			if ownSpace(&clouds[i]) {
+				spaces = append(spaces, s.cloudSpace(&clouds[i]))
+			}
+		}
+	}
+	sizes, pending := map[string]spaceSize{}, false
+	for _, sp := range spaces {
+		u, known, stale := s.dirUsage(sp, usageWriteGap, false)
+		if known {
+			sizes[sp.ID] = spaceSize{Files: u.files, Size: u.size}
+		}
+		pending = pending || stale
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sizes": sizes, "pending": pending})
 }
