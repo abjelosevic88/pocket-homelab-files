@@ -114,7 +114,7 @@ function SpaceRow({ space, size, onNavigate }: { space: Space; size?: number; on
   )
 }
 
-type SpaceSizes = Record<string, { files: number; size: number }>
+type SpaceSizes = Record<string, { files?: number; size?: number; free?: number; total?: number }>
 
 /** What each mount and drive holds: the last totals at once, then the server's, asking again while it counts. */
 function useSpaceSizes(uid: number | undefined, version: unknown, count: number) {
@@ -124,7 +124,13 @@ function useSpaceSizes(uid: number | undefined, version: unknown, count: number)
     let timer = 0, gone = false, tries = 0
     const load = () => api.get<{ sizes: SpaceSizes; pending: boolean }>(`${V1}/spaces/sizes`).then(r => {
       if (gone) return
-      setSizes(r.sizes); localStorage.setItem(key, JSON.stringify(r.sizes))
+      // A space being counted again keeps its last size until the new one is in.
+      setSizes(old => {
+        const next: SpaceSizes = {}
+        for (const [id, s] of Object.entries(r.sizes)) next[id] = s.size === undefined && old?.[id]?.size !== undefined ? { ...s, files: old[id].files, size: old[id].size } : s
+        localStorage.setItem(key, JSON.stringify(next))
+        return next
+      })
       if (r.pending && ++tries < 60) timer = window.setTimeout(load, 5000)
     }).catch(() => {})
     load()
