@@ -148,3 +148,20 @@ func TestConflictNames(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestCopyOnlyListedFiles(t *testing.T) {
+	r := &Rclone{Bin: rcloneBin(t), Dir: t.TempDir()}
+	src, dest := t.TempDir(), t.TempDir()
+	_ = os.MkdirAll(filepath.Join(src, "Paper"), 0o755)
+	_ = os.WriteFile(filepath.Join(src, "Paper", "Plan.html"), []byte("paper"), 0o644)
+	_ = os.WriteFile(filepath.Join(src, "other.txt"), []byte("other"), 0o644)
+	if _, err := r.Copy(context.Background(), Job{Config: Config{"type": "alias", "remote": src}, Dest: dest, Files: []string{"Paper/Plan.html"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "Paper", "Plan.html")); err != nil {
+		t.Fatal("listed file not copied")
+	}
+	if _, err := os.Stat(filepath.Join(dest, "other.txt")); err == nil {
+		t.Fatal("unlisted file copied")
+	}
+}

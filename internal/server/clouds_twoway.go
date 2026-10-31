@@ -59,7 +59,13 @@ func (s *Server) syncTwoWay(ctx context.Context, c *store.Cloud, cfg clouds.Conf
 		excludes = docs
 		cfg, _ = s.runtimeConfig(c) // the pass may have refreshed the sign-in
 	case "dropbox":
-		flags = append(flags, "--tpslimit", "12")
+		// Paper docs exist only as exports: they come down one-way (below), and bisync leaves them be.
+		flags = append(flags, "--tpslimit", "12", "--dropbox-skip-exports")
+		exports, err := s.exportsOnly(ctx, cfg, o.Source, "--dropbox-skip-exports")
+		if err != nil {
+			return 0, err
+		}
+		excludes = exports
 	case "icloud":
 		flags = append(flags, "--tpslimit", "5")
 	}
@@ -108,6 +114,17 @@ func (s *Server) syncTwoWay(ctx context.Context, c *store.Cloud, cfg clouds.Conf
 		if shared != nil && shared.Config != nil {
 			_ = s.saveConfig(context.WithoutCancel(ctx), c, shared.Config)
 			copied += shared.Stats.Transfers
+		}
+		if err != nil {
+			return copied, err
+		}
+	}
+	if c.Kind == "dropbox" && len(excludes) > 0 {
+		cfg, _ = s.runtimeConfig(c)
+		got, err := s.rclone().Copy(ctx, clouds.Job{Config: cfg, Source: o.Source, Dest: dest, Files: excludes,
+			Flags: []string{"--tpslimit", "12", "--update"}}, onStats)
+		if got != nil && got.Config != nil {
+			_ = s.saveConfig(context.WithoutCancel(ctx), c, got.Config)
 		}
 		if err != nil {
 			return copied, err
@@ -403,4 +420,28 @@ func (cr *cloudRunner) isRunning(id int64) bool {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 	return cr.running[id] != nil
+}
+
+// exportsOnly lists the files a cloud only has as exports (Dropbox Paper): everything listed
+// normally that disappears with the skip flag.
+func (s *Server) exportsOnly(ctx context.Context, cfg clouds.Config, source, skipFlag string) ([]string, error) {
+	all, err := s.rclone().List(ctx, cfg, source)
+	if err != nil {
+		return nil, err
+	}
+	plain, err := s.rclone().List(ctx, cfg, source, skipFlag)
+	if err != nil {
+		return nil, err
+	}
+	real := map[string]bool{}
+	for _, e := range plain {
+		real[e.Path] = true
+	}
+	var out []string
+	for _, e := range all {
+		if !real[e.Path] {
+			out = append(out, e.Path)
+		}
+	}
+	return out, nil
 }

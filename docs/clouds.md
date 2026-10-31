@@ -30,6 +30,9 @@ you pick (not the top of My files or a mount: everything in that folder goes to 
   history; Google-only formatting may be simplified); a Doc changed in Google comes down again; a Doc
   deleted here goes to Google's trash; both changed follows the drive's rule (Ask me keeps the Doc and puts
   your edit beside it as `name.pocket.docx`). Drawings, Forms and Sites are left out.
+- **Dropbox Paper** docs exist only as exports, so on a two-way Dropbox they come down one-way
+  (`--dropbox-skip-exports` for bisync, then a copy of just those paths) and are never uploaded.
+  OneDrive's OneNote notebooks are hidden by rclone and left alone.
 - **"Shared with me"** stays one-way even on a two-way drive: other people's files are never changed.
 - Two-way needs write access: Google `drive`, Dropbox `files.content.write`, Microsoft
   `Files.ReadWrite(.All)`. Switching a one-way drive to two-way asks to sign in again once. iCloud and

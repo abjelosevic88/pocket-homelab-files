@@ -152,6 +152,7 @@ type Job struct {
 	Config Config   // the remote
 	Source string   // path inside the remote ("" = its root)
 	Dest   string   // local folder
+	Files  []string // only these paths (relative to Source), when given
 	Flags  []string // extra rclone flags
 }
 
@@ -176,6 +177,18 @@ func (r *Rclone) Copy(ctx context.Context, job Job, onStats func(Stats)) (*Resul
 	args := []string{"copy", Remote + ":" + strings.TrimPrefix(job.Source, "/"), job.Dest,
 		"--config", path, "--use-json-log", "--log-level", "NOTICE", "--stats", "5s", "--stats-log-level", "NOTICE",
 		"--create-empty-src-dirs", "--retries", "3", "--low-level-retries", "10"}
+	if len(job.Files) > 0 {
+		f, err := os.CreateTemp(r.Dir, "files-*.txt")
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range job.Files {
+			fmt.Fprintln(f, p)
+		}
+		f.Close()
+		defer os.Remove(f.Name())
+		args = append(args, "--files-from-raw", f.Name())
+	}
 	args = append(args, job.Flags...)
 	cmd := exec.CommandContext(ctx, r.Bin, args...)
 	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
