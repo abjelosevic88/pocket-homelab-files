@@ -60,6 +60,9 @@
 .space-ico { width: 18px; display: grid; place-items: center; flex-shrink: 0; }
 .space-flag { color: var(--faint); display: grid; place-items: center; }
 .space-size { flex-shrink: 0; font-weight: 500; }
+.space-cap { position: absolute; left: 36px; right: 8px; bottom: 2px; height: 2px; border-radius: 1px; background: var(--surface-3); display: flex; overflow: hidden; pointer-events: none; }
+.space-cap .own { background: var(--accent); }
+.space-cap .rest { background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .space-owner { margin-left: auto; color: var(--faint); font-size: 11.5px; max-width: 40%; padding-left: 6px; }
 .sb-more { display: block; padding: 5px 10px 5px 36px; font-size: 12.5px; color: var(--muted); border-radius: 8px; }
 .sb-more:hover { background: var(--hover); color: var(--text); text-decoration: none; }

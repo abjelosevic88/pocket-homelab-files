@@ -637,6 +637,10 @@ func copyTree(from, to string) error {
 // Walk visits every entry below rel (not following symlinks). fn returning
 // filepath.SkipDir skips a folder; io.EOF stops the walk.
 func (s *Space) Walk(rel string, hidden bool, fn func(e *Entry) error) error {
+	return s.walk(rel, hidden, func(fi fs.FileInfo, p string) error { return fn(entryOf(fi, p)) })
+}
+
+func (s *Space) walk(rel string, hidden bool, fn func(fi fs.FileInfo, p string) error) error {
 	abs, err := s.Resolve(rel)
 	if err != nil {
 		return err
@@ -666,7 +670,7 @@ func (s *Space) Walk(rel string, hidden bool, fn func(e *Entry) error) error {
 			return nil
 		}
 		r, _ := filepath.Rel(abs, p)
-		return fn(entryOf(fi, Join(rel, filepath.ToSlash(r))))
+		return fn(fi, Join(rel, filepath.ToSlash(r)))
 	})
 	if errors.Is(err, io.EOF) {
 		return nil
@@ -674,13 +678,22 @@ func (s *Space) Walk(rel string, hidden bool, fn func(e *Entry) error) error {
 	return err
 }
 
-// Usage adds up the bytes below rel.
+// Usage adds up the bytes below rel. A hardlinked file (a download still seeding next to its copy
+// in the library) takes its space once, so it is counted once.
 func (s *Space) Usage(rel string) (files int, size int64) {
-	_ = s.Walk(rel, true, func(e *Entry) error {
-		if !e.IsDir {
-			files++
-			size += e.Size
+	seen := map[[2]uint64]bool{}
+	_ = s.walk(rel, true, func(fi fs.FileInfo, _ string) error {
+		if fi.IsDir() {
+			return nil
 		}
+		if key, linked := linkKey(fi); linked {
+			if seen[key] {
+				return nil
+			}
+			seen[key] = true
+		}
+		files++
+		size += fi.Size()
 		return nil
 	})
 	return

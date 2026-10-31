@@ -88,14 +88,14 @@ function SpaceGroup({ title, list, sizes, onNavigate, limit = 0 }: { title: stri
         <button type="button" className="sb-h-btn" aria-expanded={open} onClick={() => setOpen(o => !o)}><Icon name={open ? 'chevronDown' : 'chevronRight'} size={13} />{title}</button>
       </h4>
       {open && <ul className="cal-list">
-        {shown.map(s => <SpaceRow key={s.id} space={s} size={sizes?.[s.id]?.size} onNavigate={onNavigate} />)}
+        {shown.map(s => <SpaceRow key={s.id} space={s} size={sizes?.[s.id]} onNavigate={onNavigate} />)}
         {limit > 0 && list.length > limit && <li><Link to="/shared" className="sb-more" onClick={onNavigate}>All {list.length} shared…</Link></li>}
       </ul>}
     </section>
   )
 }
 
-function SpaceRow({ space, size, onNavigate }: { space: Space; size?: number; onNavigate: () => void }) {
+function SpaceRow({ space, size, onNavigate }: { space: Space; size?: SpaceSizes[string]; onNavigate: () => void }) {
   const loc = useLocation()
   const to = filesRoute(space.id)
   let active = false
@@ -108,13 +108,34 @@ function SpaceRow({ space, size, onNavigate }: { space: Space; size?: number; on
         <span className="cal-name ellipsis">{space.name}</span>
         {space.perm === 'view' && space.kind !== 'cloud' && <span className="space-flag" title="View only"><Icon name="lock" size={12} /></span>}
         {space.owner && <span className="space-owner ellipsis">{space.owner}</span>}
-        {size !== undefined && <span className="sb-count space-size" title={`${bytes(size)} in ${space.name}`}>{bytes(size)}</span>}
+        {size && <span className="sb-count space-size" title={capacityTitle(space, size)}>{bytes(size.size)}</span>}
       </NavLink>
+      {size?.total ? <SpaceCapacity size={size} /> : null}
     </li>
   )
 }
 
-type SpaceSizes = Record<string, { files: number; size: number }>
+type SpaceSizes = Record<string, { files: number; size: number; total?: number; free?: number }>
+
+/** How full the disk under a mount (or the account behind a drive) is: this place's own share, then everything else on it. */
+function SpaceCapacity({ size }: { size: SpaceSizes[string] }) {
+  const total = size.total!, used = Math.max(0, total - (size.free ?? 0)), own = Math.min(size.size, used)
+  const pct = (n: number) => Math.min(100, n / total * 100) + '%'
+  return (
+    <span className="space-cap" aria-hidden="true">
+      <span className="own" style={{ width: pct(own) }} />
+      <span className="rest" style={{ width: pct(used - own) }} />
+    </span>
+  )
+}
+
+function capacityTitle(space: Space, size: SpaceSizes[string]) {
+  const here = `${bytes(size.size)} in ${space.name}`
+  if (!size.total) return here
+  const used = Math.max(0, size.total - (size.free ?? 0))
+  const where = space.kind === 'cloud' ? 'in the account' : 'on this disk'
+  return `${here}\n${bytes(used)} of ${bytes(size.total)} used ${where} (${Math.round(used / size.total * 100)}%) · ${bytes(size.free ?? 0)} free`
+}
 
 /** What each mount and drive holds: the last totals at once, then the server's, asking again while it counts. */
 function useSpaceSizes(uid: number | undefined, version: unknown, count: number) {
@@ -125,7 +146,8 @@ function useSpaceSizes(uid: number | undefined, version: unknown, count: number)
     const load = () => api.get<{ sizes: SpaceSizes; pending: boolean }>(`${V1}/spaces/sizes`).then(r => {
       if (gone) return
       setSizes(r.sizes); localStorage.setItem(key, JSON.stringify(r.sizes))
-      if (r.pending && ++tries < 60) timer = window.setTimeout(load, 5000)
+      // A media disk takes minutes to count: keep asking, more slowly, until it is done.
+      if (r.pending) timer = window.setTimeout(load, Math.min(30000, 5000 * ++tries))
     }).catch(() => {})
     load()
     return () => { gone = true; clearTimeout(timer) }
