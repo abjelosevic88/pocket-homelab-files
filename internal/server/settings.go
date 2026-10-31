@@ -112,13 +112,12 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	if base == "" {
 		base = "http://" + r.Host
 	}
-	home := s.homeSpace(u.ID)
-	files, used := home.Usage("/")
+	files, used, stale := s.homeUsage(u.ID)
 	out := map[string]any{
 		"version": Version, "go": runtime.Version(), "db_size": size, "base_url": s.cfg.BaseURL, "public_url": s.cfg.PublicURL,
 		"public_listener": s.cfg.PublicPort != 0, "core": s.coreStatus(), "timezone": s.cfg.Timezone,
 		"webdav":      map[string]string{"url": base + "/dav/", "nextcloud_url": base + "/remote.php/dav/files/" + u.Username + "/", "username": u.Username},
-		"home":        map[string]any{"files": files, "size": used},
+		"home":        map[string]any{"files": files, "size": used, "stale": stale},
 		"disk":        map[string]any{"free": free, "total": total},
 		"max_send_mb": s.cfg.MaxSendMB, "max_send_days": s.cfg.MaxSendDays, "mounting": len(s.cfg.MountRoots) > 0,
 	}

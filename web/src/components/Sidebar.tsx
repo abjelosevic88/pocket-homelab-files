@@ -11,11 +11,23 @@ import { newItems, type NewKind } from './Layout'
 import { type Anchor, Menu, rectOf } from './ui'
 
 export function Sidebar({ onNew, onNavigate }: { onNew: (k: NewKind) => void; onNavigate: () => void }) {
-  const { status, settings, spaces, version } = useApp()
+  const { status, settings, spaces, version, user } = useApp()
   const loc = useLocation()
   const [menu, setMenu] = useState<Anchor | null>(null)
-  const [info, setInfo] = useState<SystemInfo | null>(null)
-  useEffect(() => { api.get<SystemInfo>(`${V1}/settings/system`).then(setInfo).catch(() => {}) }, [version])
+  // The last usage seen is shown at once; the server answers from its own count and,
+  // when that count is being refreshed, the sidebar asks again a moment later.
+  const usageKey = `pf-usage-${user?.id ?? ''}`
+  const [info, setInfo] = useState<SystemInfo | null>(() => { try { return JSON.parse(localStorage.getItem(usageKey) || 'null') } catch { return null } })
+  useEffect(() => {
+    let timer = 0, gone = false
+    const load = (again: boolean) => api.get<SystemInfo>(`${V1}/settings/system`).then(i => {
+      if (gone) return
+      setInfo(i); localStorage.setItem(usageKey, JSON.stringify({ home: i.home, disk: i.disk }))
+      if (i.home.stale && again) timer = window.setTimeout(() => load(false), 3000)
+    }).catch(() => {})
+    load(true)
+    return () => { gone = true; clearTimeout(timer) }
+  }, [version, usageKey])
   const title = settings?.title || status?.title || 'Pocket Files'
   const mounts = spaces.filter(s => s.kind === 'mount')
   const shared = spaces.filter(s => s.kind === 'share')

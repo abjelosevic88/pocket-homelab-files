@@ -55,7 +55,7 @@ export interface SystemInfo {
   version: string; go: string; db_size: number; base_url: string; public_url: string; public_listener: boolean
   core: { configured: boolean; url: string; registered: boolean; error: string }; timezone: string
   webdav: { url: string; nextcloud_url: string; username: string }
-  home: { files: number; size: number }; disk: { free: number; total: number }
+  home: { files: number; size: number; stale?: boolean }; disk: { free: number; total: number }
   max_send_mb: number; max_send_days: number; mounting: boolean
   box_counts?: Record<string, number>; data_dir?: string; mount_roots?: string[]
 }
