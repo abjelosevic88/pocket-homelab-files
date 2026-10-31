@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -183,5 +184,66 @@ func TestPickedFolderMustBeWritable(t *testing.T) {
 	}
 	if res, _ := a.do("GET", "/api/v1/clouds/oauth/gdrive/start?dest_space=share:1", nil); res.Code < 400 {
 		t.Fatal("OAuth start accepted a share as destination")
+	}
+}
+
+func TestCloudAppCheckReadsProviders(t *testing.T) {
+	for _, tc := range []struct {
+		kind, code, desc string
+		ok               bool
+	}{
+		{"gdrive", "invalid_client", "The OAuth client was not found.", false},
+		{"gdrive", "invalid_grant", "Malformed auth code.", true},
+		{"dropbox", "", "", false}, // body only: {"error": "invalid_client: Invalid client_id or client_secret"}
+		{"dropbox", "invalid_grant", "code doesn't exist or has expired", true},
+		{"onedrive", "unauthorized_client", "AADSTS700016: Application with identifier 'x' was not found", false},
+		{"onedrive", "invalid_client", "AADSTS7000215: Invalid client secret provided.", false},
+		{"onedrive", "invalid_request", "AADSTS90009: something else about app-only tokens", true},
+	} {
+		raw := ""
+		if tc.kind == "dropbox" && tc.code == "" {
+			raw = `{"error": "invalid_client: Invalid client_id or client_secret"}`
+		}
+		if ok, msg := judgeCheck(tc.kind, tc.code, tc.desc, raw); ok != tc.ok {
+			t.Errorf("%s %s %q: ok=%v %s", tc.kind, tc.code, tc.desc, ok, msg)
+		}
+	}
+}
+
+func TestCloudAppsAdminOnlyAndSettingsWin(t *testing.T) {
+	s, h := testServer(t)
+	a := newPerson(t, s, h, "a@example.com", "admin")
+	m := newPerson(t, s, h, "m@example.com", "member")
+	if res, _ := m.do("GET", "/api/v1/clouds/apps", nil); res.Code != http.StatusForbidden {
+		t.Fatalf("member listed sign-in apps: %d", res.Code)
+	}
+	apps := a.list("GET", "/api/v1/clouds/apps", nil)
+	if len(apps) != 3 || apps[0]["redirect"] != "https://files.example/api/v1/clouds/oauth/gdrive/callback" || apps[0]["configured"] != false {
+		t.Fatalf("apps: %v", apps)
+	}
+	// Saved values (as the PUT stores them after a passing check) win over the environment.
+	s.cfg.GoogleClientID, s.cfg.GoogleClientSecret = "env-id", "env-secret"
+	if cr := s.cloudAppFor(t.Context(), "gdrive"); cr.Source != "env" || cr.ID != "env-id" {
+		t.Fatalf("env: %+v", cr)
+	}
+	sealed, _ := s.seal("ui-secret")
+	_ = s.store.SetBoxValue(t.Context(), cloudAppKey("gdrive", "id"), "ui-id")
+	_ = s.store.SetBoxValue(t.Context(), cloudAppKey("gdrive", "secret"), sealed)
+	if cr := s.cloudAppFor(t.Context(), "gdrive"); cr.Source != "settings" || cr.ID != "ui-id" || cr.Secret != "ui-secret" {
+		t.Fatalf("settings: %+v", cr)
+	}
+	var raw string
+	_ = s.store.DB.QueryRow(`SELECT value FROM settings WHERE key = ?`, cloudAppKey("gdrive", "secret")).Scan(&raw)
+	if strings.Contains(raw, "ui-secret") {
+		t.Fatal("secret stored in clear")
+	}
+	_, prov := a.do("GET", "/api/v1/clouds/providers", nil)
+	if p := prov["providers"].([]any)[0].(map[string]any); p["configured"] != true {
+		t.Fatalf("provider not ready: %v", p)
+	}
+	// Forgetting it falls back to the environment.
+	a.do("DELETE", "/api/v1/clouds/apps/gdrive", nil)
+	if cr := s.cloudAppFor(t.Context(), "gdrive"); cr.Source != "env" {
+		t.Fatalf("after delete: %+v", cr)
 	}
 }

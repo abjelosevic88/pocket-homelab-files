@@ -306,6 +306,9 @@ func (s *Server) Router() http.Handler {
 				r.Get("/backup", s.handleBackup)
 
 				r.Get("/clouds/providers", s.handleCloudProviders)
+				r.Get("/clouds/apps", s.handleCloudApps)
+				r.Put("/clouds/apps/{kind}", s.handleSaveCloudApp)
+				r.Delete("/clouds/apps/{kind}", s.handleDeleteCloudApp)
 				r.Get("/clouds", s.handleListClouds)
 				r.Post("/clouds", s.handleCreateCloud)
 				r.Get("/clouds/oauth/{kind}/start", s.handleCloudOAuthStart)

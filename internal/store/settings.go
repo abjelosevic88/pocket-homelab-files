@@ -160,3 +160,20 @@ func b01(b bool) string {
 	}
 	return "0"
 }
+
+// BoxValue reads one box-wide setting ("" when unset).
+func (s *Store) BoxValue(ctx context.Context, key string) string {
+	var v string
+	_ = s.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	return v
+}
+
+// SetBoxValue writes one box-wide setting; "" removes it.
+func (s *Store) SetBoxValue(ctx context.Context, key, value string) error {
+	if value == "" {
+		_, err := s.DB.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, key)
+		return err
+	}
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}

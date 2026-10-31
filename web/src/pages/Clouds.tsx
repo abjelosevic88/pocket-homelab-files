@@ -10,6 +10,7 @@ import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 import { Field, Loading, Modal, Progress, Segmented, SettingRow, Toggle, useAsync, useToast } from '../components/ui'
 import { Section } from './Settings'
+import { type CloudApp, CloudAppDialog, CloudApps } from './CloudApps'
 
 const INTERVALS = [1, 6, 12, 24, 168].map(h => ({ value: h, label: h === 1 ? 'Every hour' : h === 24 ? 'Every day' : h === 168 ? 'Every week' : `Every ${h} hours` }))
 const COLORS: Record<CloudKind, string> = { gdrive: '#1a73e8', dropbox: '#0061fe', onedrive: '#0078d4', icloud: '#3b82f6', rclone: '#64748b' }
@@ -26,7 +27,8 @@ const SHORT: Record<CloudKind, string> = {
 type Providers = { providers: CloudProvider[]; rclone: string; rclone_error?: string; redirect: string }
 
 export function Clouds() {
-  const { bump } = useApp()
+  const { bump, user } = useApp()
+  const admin = user?.role === 'admin'
   const { toast } = useToast()
   const navigate = useNavigate()
   const providers = useAsync(() => api.get<Providers>(`${V1}/clouds/providers`), [])
@@ -95,7 +97,9 @@ export function Clouds() {
         </div>
       </Section>
 
-      {adding && <ConnectDialog providers={providers.data} onClose={() => setAdding(false)} onCreated={c => { setAdding(false); load(); bump(); if (c.status === 'code') setCode(c) }} />}
+      {admin && <CloudApps onChanged={providers.reload} />}
+
+      {adding && <ConnectDialog providers={providers.data} admin={admin} onSetUp={() => providers.reload()} onClose={() => setAdding(false)} onCreated={c => { setAdding(false); load(); bump(); if (c.status === 'code') setCode(c) }} />}
       {edit && <EditDialog cloud={edit} kind={kinds[edit.kind]} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); bump() }} />}
       {del && <DisconnectDialog cloud={del} onClose={() => setDel(null)} onDone={folder => { setDel(null); load(); bump(); toast(folder ? `Disconnected; the copy is now in My files${folder}` : 'Disconnected') }} />}
       {code && <CodeDialog cloud={code} onClose={() => setCode(null)} onDone={() => { setCode(null); load(); bump() }} />}
@@ -125,7 +129,8 @@ function Status({ c }: { c: Cloud }) {
   </div>
 }
 
-function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers; onClose: () => void; onCreated: (c: Cloud) => void }) {
+function ConnectDialog({ providers, admin, onSetUp, onClose, onCreated }: { providers: Providers; admin: boolean; onSetUp: () => void; onClose: () => void; onCreated: (c: Cloud) => void }) {
+  const [setup, setSetup] = useState<CloudApp | null>(null)
   const { toast } = useToast()
   const [kind, setKind] = useState<CloudKind | null>(null)
   const [name, setName] = useState('')
@@ -162,16 +167,21 @@ function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers
     <Modal title="Connect a drive" onClose={onClose}>
       <div className="cloud-pick">
         {providers.providers.map(x => (
-          <button type="button" key={x.kind} className="cloud-pick-row" disabled={!x.configured} onClick={() => { setKind(x.kind); setName(x.kind === 'rclone' ? '' : x.name) }}>
+          <button type="button" key={x.kind} className="cloud-pick-row" disabled={!x.configured && !admin}
+            onClick={() => {
+              if (!x.configured) { api.get<CloudApp[]>(`${V1}/clouds/apps`).then(list => setSetup(list.find(a => a.kind === x.kind) || null)).catch(e => toast((e as Error).message, 'err')); return }
+              setKind(x.kind); setName(x.kind === 'rclone' ? '' : x.name)
+            }}>
             <span className="cloud-pick-ico" style={{ color: COLORS[x.kind] }}><Icon name="cloud" size={20} /></span>
             <span className="cloud-pick-text">
               <b>{x.name}</b>
-              <small>{x.configured ? SHORT[x.kind] : 'Not set up on this box yet: the admin adds its sign-in app (docs/clouds.md).'}</small>
+              <small>{x.configured ? SHORT[x.kind] : admin ? 'Not set up yet. Tap to set it up (about five minutes).' : 'Not set up yet: ask the admin of this box.'}</small>
             </span>
-            {x.configured && <Icon name="chevronRight" size={16} className="muted" />}
+            {x.configured ? <Icon name="chevronRight" size={16} className="muted" /> : admin && <span className="btn sm">Set up</span>}
           </button>
         ))}
       </div>
+      {setup && <CloudAppDialog app={setup} onClose={() => setSetup(null)} onSaved={() => { setSetup(null); onSetUp() }} />}
     </Modal>
   )
 

@@ -47,14 +47,14 @@ type cloudField struct {
 	Placeholder string `json:"placeholder,omitempty"`
 }
 
-func (s *Server) cloudProviders() []cloudProvider {
-	c := s.cfg
+func (s *Server) cloudProviders(ctx context.Context) []cloudProvider {
+	ready := func(kind string) bool { return s.cloudAppFor(ctx, kind).ready() }
 	return []cloudProvider{
-		{Kind: "gdrive", Name: "Google Drive", Auth: "oauth", Configured: c.GoogleClientID != "" && c.GoogleClientSecret != "",
+		{Kind: "gdrive", Name: "Google Drive", Auth: "oauth", Configured: ready("gdrive"),
 			Help: "Read-only access. Google Docs, Sheets and Slides arrive as Word, Excel and PowerPoint files."},
-		{Kind: "dropbox", Name: "Dropbox", Auth: "oauth", Configured: c.DropboxAppKey != "" && c.DropboxAppSecret != "",
+		{Kind: "dropbox", Name: "Dropbox", Auth: "oauth", Configured: ready("dropbox"),
 			Help: "Read-only access to your whole Dropbox."},
-		{Kind: "onedrive", Name: "OneDrive", Auth: "oauth", Configured: c.MicrosoftClientID != "" && c.MicrosoftClientSecret != "",
+		{Kind: "onedrive", Name: "OneDrive", Auth: "oauth", Configured: ready("onedrive"),
 			Help: "Read-only access to your OneDrive."},
 		{Kind: "icloud", Name: "iCloud Drive", Auth: "form", Configured: true,
 			Fields: []cloudField{{Key: "apple_id", Label: "Apple ID", Placeholder: "you@icloud.com"}, {Key: "password", Label: "Password", Secret: true}},
@@ -65,23 +65,8 @@ func (s *Server) cloudProviders() []cloudProvider {
 	}
 }
 
-func (s *Server) oauthApp(kind string) *clouds.OAuthApp {
-	c := s.cfg
-	switch kind {
-	case "gdrive":
-		if c.GoogleClientID != "" {
-			return clouds.GoogleApp(c.GoogleClientID, c.GoogleClientSecret)
-		}
-	case "dropbox":
-		if c.DropboxAppKey != "" {
-			return clouds.DropboxApp(c.DropboxAppKey, c.DropboxAppSecret)
-		}
-	case "onedrive":
-		if c.MicrosoftClientID != "" {
-			return clouds.MicrosoftApp(c.MicrosoftClientID, c.MicrosoftClientSecret, c.MicrosoftTenant)
-		}
-	}
-	return nil
+func (s *Server) oauthApp(ctx context.Context, kind string) *clouds.OAuthApp {
+	return appFromCreds(kind, s.cloudAppFor(ctx, kind))
 }
 
 func providerName(kind string) string {
@@ -182,18 +167,19 @@ func (s *Server) runtimeConfig(c *store.Cloud) (clouds.Config, error) {
 			return nil, err
 		}
 	}
+	app := s.cloudAppFor(context.Background(), c.Kind)
 	switch c.Kind {
 	case "gdrive":
 		cfg["type"], cfg["scope"] = "drive", "drive.readonly"
-		cfg["client_id"], cfg["client_secret"] = s.cfg.GoogleClientID, s.cfg.GoogleClientSecret
+		cfg["client_id"], cfg["client_secret"] = app.ID, app.Secret
 	case "dropbox":
 		cfg["type"] = "dropbox"
-		cfg["client_id"], cfg["client_secret"] = s.cfg.DropboxAppKey, s.cfg.DropboxAppSecret
+		cfg["client_id"], cfg["client_secret"] = app.ID, app.Secret
 	case "onedrive":
 		cfg["type"] = "onedrive"
-		cfg["client_id"], cfg["client_secret"] = s.cfg.MicrosoftClientID, s.cfg.MicrosoftClientSecret
-		if t := s.cfg.MicrosoftTenant; t != "" && t != "common" {
-			cfg["tenant"] = t
+		cfg["client_id"], cfg["client_secret"] = app.ID, app.Secret
+		if app.Tenant != "" && app.Tenant != "common" {
+			cfg["tenant"] = app.Tenant
 		}
 	case "icloud":
 		cfg["type"] = "iclouddrive"
@@ -537,7 +523,7 @@ func (s *Server) viewCloud(c *store.Cloud) cloudView {
 
 func (s *Server) handleCloudProviders(w http.ResponseWriter, r *http.Request) {
 	ver, err := s.rclone().Version(r.Context())
-	out := map[string]any{"providers": s.cloudProviders(), "rclone": ver, "redirect": s.cfg.BaseURL + "/api/v1/clouds/oauth/{kind}/callback"}
+	out := map[string]any{"providers": s.cloudProviders(r.Context()), "rclone": ver, "redirect": s.cfg.BaseURL + "/api/v1/clouds/oauth/{kind}/callback"}
 	if err != nil {
 		out["rclone_error"] = err.Error()
 	}
@@ -887,7 +873,7 @@ func (s *Server) signState(v string) string {
 // handleCloudOAuthStart answers {url} for the browser; the connect choices ride in a signed cookie.
 func (s *Server) handleCloudOAuthStart(w http.ResponseWriter, r *http.Request) {
 	kind := chi.URLParam(r, "kind")
-	app := s.oauthApp(kind)
+	app := s.oauthApp(r.Context(), kind)
 	if app == nil {
 		writeErr(w, http.StatusBadRequest, providerName(kind)+" is not set up on this box yet (the admin adds its OAuth client; see docs/clouds.md)")
 		return
@@ -949,7 +935,7 @@ func (s *Server) handleCloudOAuthCallback(w http.ResponseWriter, r *http.Request
 		fail("The sign-in does not match this account. Try again.")
 		return
 	}
-	app := s.oauthApp(kind)
+	app := s.oauthApp(r.Context(), kind)
 	if app == nil {
 		fail(providerName(kind) + " is not set up on this box")
 		return

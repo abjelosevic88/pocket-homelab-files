@@ -35,6 +35,15 @@ the cloud.
 | iCloud Drive | Apple ID + password, then the code Apple sends to your devices | none |
 | Other | paste one remote from `rclone config show` | none |
 
+Admins set the three sign-in apps up in **Settings → Connected drives → Sign-in apps** (or from the
+greyed-out drive in "Connect a drive"): a step-by-step guide per provider with the redirect address to
+copy, fields for the client ID and secret, and **Check & save**, which asks the provider whether it knows
+that client before anything is saved (Google and Dropbox: a made-up authorization code is refused as
+`invalid_grant` for a real client and `invalid_client` for a wrong one; Microsoft: an app-only token
+request on the `consumers` endpoint, which names an unknown app or a wrong secret). Saved values are
+box settings (`cloud_app.<kind>.id/secret/tenant`, the secret sealed) and win over the environment
+variables below; Remove falls back to the environment. `GET/PUT/DELETE /api/v1/clouds/apps[/{kind}]`.
+
 OAuth redirect URI to register with each provider: `BASE_URL/api/v1/clouds/oauth/<kind>/callback`
 (`gdrive`, `dropbox`, `onedrive`). Pocket Photos uses the same variable names and path, so one client
 per provider can serve both apps: register both redirect URIs.
