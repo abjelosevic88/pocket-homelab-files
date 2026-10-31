@@ -48,6 +48,9 @@ func (s *Server) space(ctx context.Context, uid int64, id string) (*vfs.Space, e
 		if err != nil {
 			return nil, err
 		}
+		if !ownSpace(c) {
+			return nil, store.ErrNotFound
+		}
 		return s.cloudSpace(c), nil
 	case strings.HasPrefix(id, "share:"):
 		n, _ := strconv.ParseInt(strings.TrimPrefix(id, "share:"), 10, 64)
@@ -121,8 +124,8 @@ func (s *Server) handleSpaces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, c := range clouds {
-		if c.IntervalHours == 0 {
-			continue // one-time copies live in My files
+		if !ownSpace(&c) {
+			continue // the copy lives in My files or a mount
 		}
 		out = append(out, spaceView{ID: "cloud:" + strconv.FormatInt(c.ID, 10), Kind: "cloud", Name: c.Name, Perm: "view", IsDir: true, ReadOnly: true, Cloud: c.Kind})
 	}

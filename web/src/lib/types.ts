@@ -70,5 +70,6 @@ export interface Cloud {
   interval_hours: number; status: 'idle' | 'syncing' | 'error' | 'reconnect' | 'code' | 'done'; error?: string
   last_sync_at?: string; last_ok_at?: string; next_sync_at?: string; files: number; bytes: number; created_at: string
   shared_with_me?: boolean; folder?: string; source?: string; space?: string; path?: string
+  dest_space?: string; dest_path?: string; dest_name?: string
   progress?: CloudProgress; question?: { name: string; help: string; error?: string }
 }

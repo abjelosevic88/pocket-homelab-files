@@ -6,13 +6,13 @@ import { FileGlyph, Icon } from './icons'
 import { Loading, Modal } from './ui'
 
 /** Pick a folder (in any place you may write to). */
-export function FolderPicker({ title, button, startSpace = 'home', startPath = '/', onPick, onClose, writableOnly = true }: { title: string; button: string; startSpace?: string; startPath?: string; onPick: (space: string, path: string) => void; onClose: () => void; writableOnly?: boolean }) {
+export function FolderPicker({ title, button, startSpace = 'home', startPath = '/', onPick, onClose, writableOnly = true, kinds }: { title: string; button: string; startSpace?: string; startPath?: string; onPick: (space: string, path: string) => void; onClose: () => void; writableOnly?: boolean; kinds?: string[] }) {
   const { spaces } = useApp()
   const [space, setSpace] = useState(startSpace)
   const [path, setPath] = useState(startPath)
   const [data, setData] = useState<Listing | null>(null)
   const [err, setErr] = useState('')
-  const usable = spaces.filter(s => s.is_dir && (!writableOnly || s.perm === 'edit'))
+  const usable = spaces.filter(s => s.is_dir && (!writableOnly || s.perm === 'edit') && (!kinds || kinds.includes(s.kind)))
 
   useEffect(() => {
     setData(null); setErr('')

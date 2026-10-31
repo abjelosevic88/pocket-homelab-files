@@ -5,6 +5,7 @@ import { api, filesRoute, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { ago, bytes, stamp } from '../lib/format'
 import type { Cloud, CloudKind, CloudProvider } from '../lib/types'
+import { FolderPicker } from '../components/FolderPicker'
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 import { Field, Loading, Modal, Progress, Segmented, SettingRow, Toggle, useAsync, useToast } from '../components/ui'
@@ -108,9 +109,10 @@ function Status({ c }: { c: Cloud }) {
   if (c.status === 'code') return <div className="small muted">{c.question ? 'Waiting for the code Apple sent to your devices.' : 'Sign in again to finish connecting.'}</div>
   const totals = c.last_ok_at ? `${c.files.toLocaleString()} files · ${bytes(c.bytes)}` : ''
   if (c.status === 'error') return <div className="small"><span className="danger-text">{c.error}</span>{totals && <span className="muted"> · last good copy {ago(c.last_ok_at!)}</span>}</div>
-  if (c.status === 'done') return <div className="small muted" title={c.last_ok_at ? stamp(c.last_ok_at) : ''}>Copied {ago(c.last_ok_at || '')} into My files{c.folder} · {totals}</div>
+  const into = c.dest_space ? `${c.dest_name}${c.dest_path === '/' ? '' : c.dest_path}` : `My files${c.folder}`
+  if (c.status === 'done') return <div className="small muted" title={c.last_ok_at ? stamp(c.last_ok_at) : ''}>Copied {ago(c.last_ok_at || '')} into {into} · {totals}</div>
   return <div className="small muted" title={c.last_sync_at ? stamp(c.last_sync_at) : ''}>
-    {c.last_sync_at ? `Synced ${ago(c.last_sync_at)}` : 'Not synced yet'}{totals && ` · ${totals}`}{c.next_sync_at && new Date(c.next_sync_at) > new Date() ? ` · next ${new Date(c.next_sync_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}
+    {c.last_sync_at ? `Synced ${ago(c.last_sync_at)}` : 'Not synced yet'}{c.dest_space && ` into ${into}`}{totals && ` · ${totals}`}{c.next_sync_at && new Date(c.next_sync_at) > new Date() ? ` · next ${new Date(c.next_sync_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}
   </div>
 }
 
@@ -124,6 +126,10 @@ function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers
   const [source, setSource] = useState('')
   const [fields, setFields] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  const [dest, setDest] = useState<{ space: string; path: string } | null>(null)
+  const [picking, setPicking] = useState(false)
+  const { spaces } = useApp()
+  const destLabel = dest ? `${spaces.find(s => s.id === dest.space)?.name || 'My files'}${dest.path === '/' ? '' : dest.path}` : ''
   const p = providers.providers.find(x => x.kind === kind)
 
   const connect = async () => {
@@ -132,13 +138,13 @@ function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers
     const hours = mode === 'once' ? 0 : interval
     try {
       if (p.auth === 'oauth') {
-        const q = new URLSearchParams({ name, interval_hours: String(hours), source })
+        const q = new URLSearchParams({ name, interval_hours: String(hours), source, dest_space: dest?.space || '', dest_path: dest?.path || '' })
         if (p.kind === 'gdrive') q.set('shared_with_me', shared ? '1' : '0')
         const r = await api.get<{ url: string }>(`${V1}/clouds/oauth/${p.kind}/start?${q}`)
         window.location.href = r.url
         return
       }
-      const c = await api.post<Cloud>(`${V1}/clouds`, { kind: p.kind, name, interval_hours: hours, source, fields })
+      const c = await api.post<Cloud>(`${V1}/clouds`, { kind: p.kind, name, interval_hours: hours, source, fields, dest_space: dest?.space || '', dest_path: dest?.path || '' })
       onCreated(c)
     } catch (e) { toast((e as Error).message, 'err'); setBusy(false) }
   }
@@ -167,9 +173,14 @@ function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers
         <p className="small muted">{p.help}</p>
         <Field label="Name"><input value={name} onChange={e => setName(e.target.value)} placeholder={p.name} /></Field>
         <Field label="How" group><Segmented size="sm" value={mode} onChange={setMode} options={[{ value: 'sync' as const, label: 'Keep in sync' }, { value: 'once' as const, label: 'Copy once' }]} /></Field>
-        {mode === 'sync'
-          ? <SettingRow title="How often" help="New and changed files come in on this schedule, into their own read-only place in the sidebar."><Select value={interval} options={INTERVALS} onChange={setInterval_} label="How often" /></SettingRow>
-          : <p className="small muted">Everything is copied once into a new folder in My files, where you can edit, move and share it like your own files.</p>}
+        {mode === 'sync' && <SettingRow title="How often" help="New and changed files come in on this schedule."><Select value={interval} options={INTERVALS} onChange={setInterval_} label="How often" /></SettingRow>}
+        <Field label="Where" group>
+          <Segmented size="sm" value={dest ? 'pick' : 'auto'} onChange={v => v === 'pick' ? setPicking(true) : setDest(null)}
+            options={[{ value: 'auto' as const, label: mode === 'sync' ? 'Its own place' : 'New folder in My files' }, { value: 'pick' as const, label: 'A folder I choose' }]} />
+        </Field>
+        <p className="small muted">{dest
+          ? <>Files go straight into <b>{destLabel}</b> <button type="button" className="btn ghost sm" onClick={() => setPicking(true)}>Change…</button><br />Files you change there are kept: a sync only replaces a file when the cloud's copy is newer.</>
+          : mode === 'sync' ? 'A read-only place under Drives in the sidebar, kept exactly like the cloud.' : 'Everything is copied once into a new folder in My files, where you can edit, move and share it like your own files.'}</p>
         {p.kind === 'gdrive' && <SettingRow title="Also “Shared with me”" help="Files others shared with you, in a folder of their own. Can be many small files."><Toggle checked={shared} onChange={setShared} label="Also Shared with me" /></SettingRow>}
         <Field label="Only this folder (optional)" help="A folder inside the cloud, like Photos/2024. Empty copies everything."><input value={source} onChange={e => setSource(e.target.value)} placeholder="Everything" /></Field>
         {(p.fields || []).map(f => (
@@ -181,6 +192,8 @@ function ConnectDialog({ providers, onClose, onCreated }: { providers: Providers
         ))}
         {busy && p.auth === 'form' && <p className="small muted">Checking the connection…</p>}
       </div>
+      {picking && <FolderPicker title={`Where should ${name || p.name} go?`} button="Use this folder" kinds={['home', 'mount']} startSpace={dest?.space || 'home'} startPath={dest?.path || '/'}
+        onClose={() => setPicking(false)} onPick={(sp, path) => { setDest({ space: sp, path }); setPicking(false) }} />}
     </Modal>
   )
 }
@@ -240,7 +253,8 @@ function EditDialog({ cloud, kind, onClose, onSaved }: { cloud: Cloud; kind?: Cl
         <Field label="Name"><input value={name} onChange={e => setName(e.target.value)} /></Field>
         {cloud.interval_hours > 0
           ? <SettingRow title="How often"><Select value={interval} options={INTERVALS} onChange={setInterval_} label="How often" /></SettingRow>
-          : <p className="small muted">Copied once into My files{cloud.folder}. “Copy again” brings in new and changed files.</p>}
+          : <p className="small muted">Copied once into {cloud.dest_space ? `${cloud.dest_name}${cloud.dest_path}` : `My files${cloud.folder}`}. “Copy again” brings in new and changed files.</p>}
+        {cloud.dest_space && cloud.interval_hours > 0 && <p className="small muted">Copies into {cloud.dest_name}{cloud.dest_path === '/' ? '' : cloud.dest_path}. To copy somewhere else, connect the drive again.</p>}
         {cloud.kind === 'gdrive' && <SettingRow title="Also “Shared with me”"><Toggle checked={shared} onChange={setShared} label="Also Shared with me" /></SettingRow>}
         <Field label="Only this folder" help={kind ? `A folder inside ${kind.name}. Empty copies everything.` : undefined}><input value={source} onChange={e => setSource(e.target.value)} placeholder="Everything" /></Field>
       </div>
@@ -252,15 +266,15 @@ function DisconnectDialog({ cloud, onClose, onDone }: { cloud: Cloud; onClose: (
   const { toast } = useToast()
   const [keep, setKeep] = useState(true)
   const go = async () => {
-    try { const r = await api.del<{ folder?: string }>(`${V1}/clouds/${cloud.id}${keep && cloud.interval_hours > 0 ? '?keep=1' : ''}`); onDone(r?.folder || '') } catch (e) { toast((e as Error).message, 'err') }
+    try { const r = await api.del<{ folder?: string }>(`${V1}/clouds/${cloud.id}${keep && cloud.interval_hours > 0 && !cloud.dest_space ? '?keep=1' : ''}`); onDone(r?.folder || '') } catch (e) { toast((e as Error).message, 'err') }
   }
   return (
     <Modal title={`Disconnect ${cloud.name}?`} size="sm" onClose={onClose} footer={<><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn danger" onClick={go}>Disconnect</button></>}>
       <div className="stack">
         <p className="small">Pocket Files stops copying from {cloud.provider}. Nothing changes in the cloud.</p>
-        {cloud.interval_hours > 0
+        {cloud.interval_hours > 0 && !cloud.dest_space
           ? <SettingRow title="Keep the copied files" help={keep ? 'They move into My files as an ordinary folder.' : `The copy (${bytes(cloud.bytes)}) is deleted from this server.`}><Toggle checked={keep} onChange={setKeep} label="Keep the copied files" /></SettingRow>
-          : <p className="small muted">The files already in My files{cloud.folder} stay.</p>}
+          : <p className="small muted">The files already in {cloud.dest_space ? `${cloud.dest_name}${cloud.dest_path === '/' ? '' : cloud.dest_path}` : `My files${cloud.folder}`} stay.</p>}
       </div>
     </Modal>
   )

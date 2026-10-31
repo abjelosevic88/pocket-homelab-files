@@ -105,7 +105,12 @@ type cloudOptions struct {
 	SharedWithMe bool   `json:"shared_with_me,omitempty"` // Google Drive: also copy "Shared with me"
 	Folder       string `json:"folder,omitempty"`         // one-time copies: the folder in My files
 	Source       string `json:"source,omitempty"`         // only this folder of the cloud ("" = all of it)
+	DestSpace    string `json:"dest_space,omitempty"`     // a folder the person picked: "home" or "mount:N"
+	DestPath     string `json:"dest_path,omitempty"`
 }
+
+// ownSpace reports whether the drive's copy is its own read-only place ("cloud:<id>").
+func ownSpace(c *store.Cloud) bool { return c.IntervalHours > 0 && optionsOf(c).DestSpace == "" }
 
 func optionsOf(c *store.Cloud) cloudOptions {
 	var o cloudOptions
@@ -123,14 +128,40 @@ func (s *Server) cloudDir(c *store.Cloud) string {
 	return filepath.Join(s.cfg.CloudDir, strconv.FormatInt(c.UserID, 10), strconv.FormatInt(c.ID, 10))
 }
 
-// destOf is where the copy goes: the drive's own folder, or a folder of My files for one-time copies.
-func (s *Server) destOf(c *store.Cloud) string {
-	if c.IntervalHours == 0 {
-		if f := optionsOf(c).Folder; f != "" {
-			return filepath.Join(s.homeDir(c.UserID), filepath.FromSlash(vfs.Clean(f)))
+// destOf is where the copy goes: a folder the person picked (in My files or a mount they can
+// edit), the drive's own folder, or a new folder of My files for one-time copies. It returns
+// the space too (nil for the drive's own folder) so the search index can be told.
+func (s *Server) destOf(ctx context.Context, c *store.Cloud) (string, *vfs.Space, string, error) {
+	o := optionsOf(c)
+	if o.DestSpace != "" {
+		sp, err := s.destSpace(ctx, c.UserID, o.DestSpace)
+		if err != nil {
+			return "", nil, "", err
 		}
+		rel := vfs.Clean(o.DestPath)
+		return filepath.Join(sp.Root, filepath.FromSlash(rel)), sp, rel, nil
 	}
-	return s.cloudDir(c)
+	if c.IntervalHours == 0 && o.Folder != "" {
+		home := s.homeSpace(c.UserID)
+		rel := vfs.Clean(o.Folder)
+		return filepath.Join(home.Root, filepath.FromSlash(rel)), home, rel, nil
+	}
+	return s.cloudDir(c), nil, "/", nil
+}
+
+// destSpace opens a place a drive may copy into: the person's home or a mount they can edit.
+func (s *Server) destSpace(ctx context.Context, uid int64, id string) (*vfs.Space, error) {
+	if id != "home" && !strings.HasPrefix(id, "mount:") {
+		return nil, badRequest("a drive can copy into My files or a mount you can edit")
+	}
+	sp, err := s.space(ctx, uid, id)
+	if err != nil {
+		return nil, err
+	}
+	if !sp.Writable() {
+		return nil, fmt.Errorf("%w: you cannot add files to %s", vfs.ErrForbidden, sp.Name)
+	}
+	return sp, nil
 }
 
 func (s *Server) cloudSpace(c *store.Cloud) *vfs.Space {
@@ -345,8 +376,16 @@ func (s *Server) syncCloud(ctx context.Context, c *store.Cloud, onStats func(clo
 		return
 	}
 	o := optionsOf(c)
-	dest := s.destOf(c)
+	dest, _, _, err := s.destOf(ctx, c)
+	if err != nil {
+		s.finishCloud(bg, c, before, err, 0)
+		return
+	}
 	flags := []string{"--transfers", "4", "--checkers", "8"}
+	if o.DestSpace != "" {
+		// A folder the person also works in: never replace a file they changed after the cloud did.
+		flags = append(flags, "--update")
+	}
 	var extra []clouds.Job
 	switch c.Kind {
 	case "gdrive":
@@ -384,7 +423,11 @@ func (s *Server) syncCloud(ctx context.Context, c *store.Cloud, onStats func(clo
 }
 
 func (s *Server) finishCloud(ctx context.Context, c *store.Cloud, before string, err error, copied int64) {
-	files, size := dirTotals(s.destOf(c))
+	dest, sp, rel, derr := s.destOf(ctx, c)
+	var files, size int64
+	if derr == nil {
+		files, size = dirTotals(dest)
+	}
 	status, msg := "idle", ""
 	if c.IntervalHours == 0 {
 		status = "done"
@@ -405,10 +448,10 @@ func (s *Server) finishCloud(ctx context.Context, c *store.Cloud, before string,
 	}
 	_ = s.store.FinishCloudSync(ctx, c.ID, status, msg, files, size, err == nil)
 	s.touch()
-	if c.IntervalHours > 0 {
+	if sp != nil {
+		s.indexTouch(sp, rel)
+	} else if s.search != nil {
 		s.search.Touch("cloud:"+strconv.FormatInt(c.ID, 10), "/")
-	} else {
-		s.search.Touch("home:"+strconv.FormatInt(c.UserID, 10), optionsOf(c).Folder)
 	}
 	s.log.Info("cloud copy finished", "cloud", c.ID, "kind", c.Kind, "status", status, "copied", copied, "files", files, "err", msg)
 	link := s.cfg.BaseURL + "/settings/clouds"
@@ -418,7 +461,11 @@ func (s *Server) finishCloud(ctx context.Context, c *store.Cloud, before string,
 	case status == "error" && before != "error" && !errors.Is(err, context.Canceled):
 		_ = s.notifyUser(ctx, c.UserID, "clouds", "Copying "+c.Name+" failed", msg, link)
 	case status == "done":
-		_ = s.notifyUser(ctx, c.UserID, "clouds", c.Name+" is copied", fmt.Sprintf("%d files are now in My files%s.", files, optionsOf(c).Folder), link)
+		where := "My files" + optionsOf(c).Folder
+		if sp != nil && optionsOf(c).DestSpace != "" {
+			where = sp.Name + strings.TrimSuffix(rel, "/")
+		}
+		_ = s.notifyUser(ctx, c.UserID, "clouds", c.Name+" is copied", fmt.Sprintf("%d files are now in %s.", files, where), link)
 	}
 }
 
@@ -445,7 +492,10 @@ type cloudView struct {
 	SharedWithMe bool             `json:"shared_with_me,omitempty"`
 	Folder       string           `json:"folder,omitempty"`
 	Source       string           `json:"source,omitempty"`
-	Space        string           `json:"space,omitempty"` // where to browse the copy
+	DestSpace    string           `json:"dest_space,omitempty"`
+	DestPath     string           `json:"dest_path,omitempty"`
+	DestName     string           `json:"dest_name,omitempty"` // the picked place's name, for display
+	Space        string           `json:"space,omitempty"`     // where to browse the copy
 	Path         string           `json:"path,omitempty"`
 	NextSyncAt   *string          `json:"next_sync_at,omitempty"`
 	Progress     *cloudProgress   `json:"progress,omitempty"`
@@ -455,8 +505,20 @@ type cloudView struct {
 func (s *Server) viewCloud(c *store.Cloud) cloudView {
 	o := optionsOf(c)
 	v := cloudView{Cloud: *c, Provider: providerName(c.Kind), SharedWithMe: o.SharedWithMe, Folder: o.Folder, Source: o.Source,
-		Progress: s.clouds.progress(c.ID)}
-	if c.IntervalHours > 0 {
+		DestSpace: o.DestSpace, DestPath: o.DestPath, Progress: s.clouds.progress(c.ID)}
+	if o.DestSpace != "" {
+		v.Space, v.Path = o.DestSpace, vfs.Clean(o.DestPath)
+		v.DestName = "My files"
+		if sp, err := s.space(context.Background(), c.UserID, o.DestSpace); err == nil && o.DestSpace != "home" {
+			v.DestName = sp.Name
+		}
+		if c.IntervalHours > 0 && c.LastSyncAt != nil {
+			if t, err := time.Parse(time.RFC3339Nano, *c.LastSyncAt); err == nil {
+				n := t.Add(time.Duration(c.IntervalHours) * time.Hour).UTC().Format(time.RFC3339)
+				v.NextSyncAt = &n
+			}
+		}
+	} else if c.IntervalHours > 0 {
 		v.Space, v.Path = "cloud:"+strconv.FormatInt(c.ID, 10), "/"
 		if c.LastSyncAt != nil {
 			if t, err := time.Parse(time.RFC3339Nano, *c.LastSyncAt); err == nil {
@@ -502,10 +564,22 @@ type cloudIn struct {
 	IntervalHours *int              `json:"interval_hours"`
 	SharedWithMe  *bool             `json:"shared_with_me"`
 	Source        *string           `json:"source"`
+	DestSpace     string            `json:"dest_space"`
+	DestPath      string            `json:"dest_path"`
 	Fields        map[string]string `json:"fields"`
 }
 
-// newCloud makes the row for a fresh connection; one-time copies get their folder in My files.
+// checkDest refuses a destination the person cannot write to, before anything is connected.
+func (s *Server) checkDest(ctx context.Context, uid int64, in cloudIn) error {
+	if in.DestSpace == "" {
+		return nil
+	}
+	_, err := s.destSpace(ctx, uid, in.DestSpace)
+	return err
+}
+
+// newCloud makes the row for a fresh connection; one-time copies without a picked folder get
+// a new folder in My files.
 func (s *Server) newCloud(ctx context.Context, uid int64, in cloudIn, login string) *store.Cloud {
 	c := &store.Cloud{UserID: uid, Kind: in.Kind, Login: login, IntervalHours: 6}
 	c.Name = strings.TrimSpace(in.Name)
@@ -522,7 +596,9 @@ func (s *Server) newCloud(ctx context.Context, uid int64, in cloudIn, login stri
 	if in.Source != nil {
 		o.Source = strings.Trim(strings.TrimSpace(*in.Source), "/")
 	}
-	if c.IntervalHours == 0 {
+	if in.DestSpace != "" {
+		o.DestSpace, o.DestPath = in.DestSpace, vfs.Clean(in.DestPath)
+	} else if c.IntervalHours == 0 {
 		o.Folder = s.freeFolder(uid, c.Name)
 	}
 	c.Options = o.json()
@@ -549,6 +625,10 @@ func (s *Server) handleCreateCloud(w http.ResponseWriter, r *http.Request) {
 	var in cloudIn
 	if err := decode(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if err := s.checkDest(ctx, me(r), in); err != nil {
+		s.fail(w, err, "destination")
 		return
 	}
 	var cfg clouds.Config
@@ -763,7 +843,7 @@ func (s *Server) handleDeleteCloud(w http.ResponseWriter, r *http.Request) {
 	}
 	s.clouds.setQuestion(c.ID, nil)
 	moved := ""
-	if c.IntervalHours > 0 {
+	if ownSpace(c) {
 		dir := s.cloudDir(c)
 		if queryBool(r, "keep") {
 			moved = s.freeFolder(c.UserID, c.Name)
@@ -824,6 +904,11 @@ func (s *Server) handleCloudOAuthStart(w http.ResponseWriter, r *http.Request) {
 	if q.Has("source") {
 		src := q.Get("source")
 		in.Source = &src
+	}
+	in.DestSpace, in.DestPath = q.Get("dest_space"), q.Get("dest_path")
+	if err := s.checkDest(r.Context(), me(r), in); err != nil {
+		s.fail(w, err, "destination")
+		return
 	}
 	payload, _ := json.Marshal(map[string]any{"in": in, "cloud": q.Get("cloud"), "uid": me(r), "nonce": store.RandomToken(12)})
 	val := base64.RawURLEncoding.EncodeToString(payload)

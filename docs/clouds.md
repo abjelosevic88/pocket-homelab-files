@@ -12,6 +12,12 @@ and a file deleted in the cloud stays here. Two ways to copy:
 | **Keep in sync** (every hour, 6 h, 12 h, day or week) | its own read-only place under **Drives** in the sidebar (`CLOUD_DIR/<user>/<drive>`) | new and changed files arrive on the schedule; "Sync now" any time |
 | **Copy once** | a new folder in **My files** | ordinary files from then on; "Copy again" brings in new and changed ones |
 
+**Where** can also be a folder you pick: anywhere in My files or in a mount you can edit (say
+`Media/photos`). Files then go straight into that folder, scheduled or once, and the drive gets no place
+of its own. Because you may work in that folder too, these copies run with `--update`: a file you changed
+after the cloud did is never replaced. Disconnecting leaves the folder as it is. The destination is fixed
+when connecting; to move it, connect the drive again.
+
 Disconnecting a scheduled drive deletes its copy, or moves it into My files when "Keep the copied files"
 is on. One-time copies already live in My files and stay.
 
@@ -65,8 +71,8 @@ All routes need a signed-in person and only see that person's drives; other ids 
 | --- | --- |
 | `GET /api/v1/clouds/providers` | `{providers: [{kind, name, auth, configured, fields?, help}], rclone, rclone_error?, redirect}` |
 | `GET /api/v1/clouds` | `[Cloud]` (with live `progress` while copying, `question` while iCloud waits for a code) |
-| `POST /api/v1/clouds` | form kinds `{kind: "icloud"\|"rclone", name, interval_hours, source?, fields}` → `Cloud` |
-| `GET /api/v1/clouds/oauth/{kind}/start` | `?name=&interval_hours=&shared_with_me=&source=&cloud=ID` → `{url}`; `cloud` reconnects |
+| `POST /api/v1/clouds` | form kinds `{kind: "icloud"\|"rclone", name, interval_hours, source?, dest_space?, dest_path?, fields}` → `Cloud` |
+| `GET /api/v1/clouds/oauth/{kind}/start` | `?name=&interval_hours=&shared_with_me=&source=&dest_space=&dest_path=&cloud=ID` → `{url}`; `cloud` reconnects |
 | `GET /api/v1/clouds/oauth/{kind}/callback` | provider redirect → `/settings/clouds?connected=ID` or `?error=` |
 | `POST /api/v1/clouds/{id}/code` | `{code}` → `Cloud` |
 | `POST /api/v1/clouds/{id}/reconnect` | iCloud `{password}` → `Cloud` (asks for a new code) |
@@ -74,4 +80,5 @@ All routes need a signed-in person and only see that person's drives; other ids 
 | `POST /api/v1/clouds/{id}/sync`, `/stop` | start now / stop the running copy |
 | `DELETE /api/v1/clouds/{id}[?keep=1]` | disconnect → `{ok, folder?}` |
 
-`interval_hours` 0 = copy once. A drive stays scheduled or one-time; only the schedule can change.
+`interval_hours` 0 = copy once. `dest_space` is `home` or `mount:N` (writable for the person). A drive
+stays scheduled or one-time, and keeps its destination; only the schedule can change.

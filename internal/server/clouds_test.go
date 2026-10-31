@@ -129,3 +129,59 @@ func TestBadRemoteIsRefused(t *testing.T) {
 		t.Fatalf("OAuth start without a client: %d", res.Code)
 	}
 }
+
+func TestPickedFolderKeepsLocalEdits(t *testing.T) {
+	s, h := testServer(t)
+	a := newPerson(t, s, h, "a@example.com", "admin")
+	src := remoteFixture(t)
+	res, d := a.do("POST", "/api/v1/clouds", map[string]any{"kind": "rclone", "name": "Work", "interval_hours": 6,
+		"dest_space": "home", "dest_path": "/Projects/From cloud",
+		"fields": map[string]string{"config": fmt.Sprintf("[x]\ntype = alias\nremote = %s\n", src)}})
+	if res.Code != http.StatusCreated {
+		t.Fatalf("create: %d %v", res.Code, d)
+	}
+	id := d["id"].(float64)
+	got := waitCloud(t, a, id, "idle")
+	if got["space"] != "home" || got["path"] != "/Projects/From cloud" || got["dest_name"] != "My files" {
+		t.Fatalf("view: %v", got)
+	}
+	for _, sp := range a.list("GET", "/api/v1/spaces", nil) {
+		if sp["kind"] == "cloud" {
+			t.Fatal("a drive copying into a picked folder also got its own place")
+		}
+	}
+	// An edit made here after the cloud's version survives the next sync.
+	local := filepath.Join(s.homeDir(1), "Projects", "From cloud", "notes.txt")
+	if err := os.WriteFile(local, []byte("edited here"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().Add(time.Hour)
+	_ = os.Chtimes(local, future, future)
+	a.do("POST", fmt.Sprintf("/api/v1/clouds/%d/sync", int(id)), nil)
+	time.Sleep(200 * time.Millisecond)
+	waitCloud(t, a, id, "idle")
+	if b, _ := os.ReadFile(local); string(b) != "edited here" {
+		t.Fatalf("local edit replaced by %q", b)
+	}
+	// Disconnecting leaves the folder alone.
+	a.do("DELETE", fmt.Sprintf("/api/v1/clouds/%d", int(id)), nil)
+	if _, err := os.Stat(filepath.Join(s.homeDir(1), "Projects", "From cloud", "Photos", "a.jpg")); err != nil {
+		t.Fatal("disconnect removed files from the picked folder")
+	}
+}
+
+func TestPickedFolderMustBeWritable(t *testing.T) {
+	s, h := testServer(t)
+	a := newPerson(t, s, h, "a@example.com", "admin")
+	remoteFixture(t)
+	for _, space := range []string{"cloud:1", "share:1", "mount:999"} {
+		res, _ := a.do("POST", "/api/v1/clouds", map[string]any{"kind": "rclone", "dest_space": space, "dest_path": "/",
+			"fields": map[string]string{"config": "[x]\ntype = alias\nremote = /tmp\n"}})
+		if res.Code < 400 {
+			t.Fatalf("destination %s accepted: %d", space, res.Code)
+		}
+	}
+	if res, _ := a.do("GET", "/api/v1/clouds/oauth/gdrive/start?dest_space=share:1", nil); res.Code < 400 {
+		t.Fatal("OAuth start accepted a share as destination")
+	}
+}

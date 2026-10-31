@@ -47,7 +47,7 @@ func (s *Server) searchRoots(ctx context.Context) []search.Root {
 	}
 	if list, err := s.store.AllClouds(ctx); err == nil {
 		for i := range list {
-			if c := &list[i]; c.IntervalHours > 0 {
+			if c := &list[i]; ownSpace(c) {
 				out = append(out, search.Root{Key: "cloud:" + strconv.FormatInt(c.ID, 10), Dir: s.cloudDir(c)})
 			}
 		}
@@ -84,7 +84,7 @@ func (s *Server) searchScopes(ctx context.Context, uid int64) []search.Scope {
 	}
 	if clouds, err := s.store.CloudsFor(ctx, uid); err == nil {
 		for _, c := range clouds {
-			if c.IntervalHours > 0 {
+			if ownSpace(&c) {
 				id := "cloud:" + strconv.FormatInt(c.ID, 10)
 				out = append(out, search.Scope{Key: id, Space: id})
 			}
