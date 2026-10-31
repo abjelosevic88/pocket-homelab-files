@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 # ---------- 3. runtime ----------
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates tzdata curl \
+RUN apk add --no-cache ca-certificates tzdata curl poppler-utils \
  && addgroup -g 1000 app && adduser -u 1000 -G app -D -h /data app
 COPY --from=build /out/pocket-files /usr/local/bin/pocket-files
 # rclone copies connected drives (Google Drive, Dropbox, OneDrive, iCloud Drive, any rclone remote).

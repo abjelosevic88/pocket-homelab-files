@@ -61,6 +61,9 @@ type Config struct {
 
 	// Connected drives (docs/clouds.md): rclone does the copying; the OAuth
 	// clouds need the box owner's own client registrations.
+	// SearchMountText also reads the documents inside mounts (default: names only).
+	SearchMountText bool
+
 	Rclone                string
 	CloudSyncConcurrency  int
 	GoogleClientID        string
@@ -162,6 +165,7 @@ func Load() (*Config, error) {
 		NotifyURL:  env("NOTIFY_URL", ""),
 		NotifyKind: strings.ToLower(env("NOTIFY_KIND", "apprise")),
 
+		SearchMountText:       envBool("SEARCH_MOUNT_TEXT", false),
 		Rclone:                env("RCLONE", "rclone"),
 		CloudSyncConcurrency:  envInt("CLOUD_SYNC_CONCURRENCY", 2),
 		GoogleClientID:        env("GOOGLE_CLIENT_ID", ""),

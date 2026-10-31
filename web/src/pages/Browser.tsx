@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Snippet } from '../components/Snippet'
 import { api, filesRoute, qs, rawURL, thumbURL, V1, zipURL } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { ago, bytes, plural, stamp } from '../lib/format'
@@ -276,7 +277,7 @@ export default function Browser() {
 
       {err && <div className="callout danger mt">{err}</div>}
       {!data && !err && <Loading />}
-      {q && <div className="search-note">{searching ? <><span className="spinner sm" /> Searching…</> : <>{plural(results?.length || 0, 'match', 'matches')} for “{q}” below {folderName}</>}</div>}
+      {q && <div className="search-note">{searching ? <><span className="spinner sm" /> Searching…</> : <>{plural(results?.length || 0, 'match', 'matches')} for “{q}” below {folderName}, in names and inside documents</>}</div>}
 
       {data && !entries.length && !searching && (
         q || filter ? <Empty title="Nothing matches" icon={<Icon name="search" size={28} />}>Try another word.</Empty>
@@ -306,7 +307,7 @@ export default function Browser() {
               <span className="c-check" onClick={ev => { ev.stopPropagation(); toggle(e.path); setAnchor(e.path) }}><input type="checkbox" checked={sel.has(e.path)} readOnly aria-label={`Select ${e.name}`} /></span>
               <span className="c-name">
                 {THUMB_TYPES.test(e.mime) && e.size < 60e6 ? <img className="mini-thumb" src={thumbURL(space, e.path, 64, e.modified)} alt="" loading="lazy" onError={ev => { (ev.target as HTMLImageElement).style.display = 'none' }} /> : <FileGlyph name={e.name} mime={e.mime} isDir={e.is_dir} size={22} shared={!!e.shared} />}
-                <span className="name ellipsis" title={e.name}>{e.name}{results && <small className="muted path-hint"> {e.path.split('/').slice(0, -1).join('/') || '/'}</small>}</span>
+                <span className="name ellipsis" title={e.name}>{e.name}{results && <small className="muted path-hint"> {e.path.split('/').slice(0, -1).join('/') || '/'}</small>}{results && e.snippet && <Snippet text={e.snippet} className="row-snippet" />}</span>
                 {e.starred && <Icon name="star" size={13} fill className="star-on" />}
                 {!!e.shared && <span className="shared-pill" title={e.shared >= 1000 ? 'Shared with everyone' : `Shared with ${plural(e.shared, 'person', 'people')}`}><Icon name="users" size={11} /></span>}
               </span>

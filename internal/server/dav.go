@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -64,9 +65,10 @@ func (s *Server) handleDAV(w http.ResponseWriter, r *http.Request) {
 		prefix = ncFilesPrefix.FindString(r.URL.Path)
 	}
 	shares, mounts := s.davNames(ctx, u.ID)
+	dfs := &davFS{s: s, uid: u.ID, home: s.homeSpace(u.ID), shares: shares, mounts: mounts}
 	h := &webdav.Handler{
 		Prefix:     prefix,
-		FileSystem: &davFS{s: s, uid: u.ID, home: s.homeSpace(u.ID), shares: shares, mounts: mounts},
+		FileSystem: dfs,
 		LockSystem: s.davLock.For(u.ID),
 		Logger: func(r *http.Request, err error) {
 			if err != nil && !os.IsNotExist(err) {
@@ -82,6 +84,18 @@ func (s *Server) handleDAV(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "PUT", "DELETE", "MKCOL", "MOVE", "COPY", "PROPPATCH":
 		defer s.touch()
+		// Once the request is done, the search index looks at the folders it changed.
+		defer func() {
+			names := []string{strings.TrimPrefix(r.URL.Path, prefix)}
+			if dst, err := url.Parse(r.Header.Get("Destination")); err == nil && dst.Path != "" {
+				names = append(names, strings.TrimPrefix(dst.Path, prefix))
+			}
+			for _, n := range names {
+				if sp, rel, virtual, err := dfs.resolve(n); err == nil && virtual == "" && sp != nil {
+					s.indexTouch(sp, path.Dir(vfs.Clean(rel)))
+				}
+			}
+		}()
 	}
 	h.ServeHTTP(w, r.WithContext(ctx))
 }

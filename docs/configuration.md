@@ -96,3 +96,11 @@ See [clouds.md](clouds.md).
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | Google Drive OAuth client (Web application) |
 | `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` | | Dropbox app |
 | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT` | tenant `common` | OneDrive app registration |
+
+## Search
+
+See [search.md](search.md). The index lives in `DATA_DIR/search.db` (rebuildable, no backup needed).
+
+| Variable | Default | |
+| --- | --- | --- |
+| `SEARCH_MOUNT_TEXT` | `false` | also read the documents inside mounts (default: their names only) |

@@ -7,7 +7,8 @@ export interface AuthStatus { needs_setup: boolean; auth_mode: string; authentic
 export type Perm = 'view' | 'edit'
 export interface Space { id: string; kind: 'home' | 'mount' | 'share' | 'cloud'; name: string; perm: Perm; is_dir: boolean; owner?: string; color?: string; read_only?: boolean; cloud?: string }
 
-export interface Entry { name: string; path: string; is_dir: boolean; size: number; modified: string; mime: string; starred?: boolean; shared?: number }
+export interface Entry { name: string; path: string; is_dir: boolean; size: number; modified: string; mime: string; starred?: boolean; shared?: number; match?: 'name' | 'content'; snippet?: string }
+export interface SearchHit { space: string; path: string; name: string; folder: string; is_dir: boolean; size: number; modified: string; ext?: string; match: 'name' | 'content'; snippet?: string }
 export interface Listing { space: Space; path: string; entry: Entry; entries: Entry[]; writable: boolean }
 
 export interface Access { user_id: number; name?: string; email?: string; perm: Perm }

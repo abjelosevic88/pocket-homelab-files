@@ -519,6 +519,7 @@ function About() {
           {info.data_dir && <div><dt>Data folder</dt><dd className="mono small">{info.data_dir}</dd></div>}
         </dl>
       </Section>
+      <SearchIndex />
       <Section title="Pocket Core" sub="With Core, people sign in with one account and Pocket Office, Documents and Review can keep files here (scopes files:read and files:write, switchable per person in Core → Links).">
         <dl className="set-dl">
           <div><dt>Connected</dt><dd className="row"><span className={`set-status ${info.core.configured ? (info.core.registered ? 'ok' : 'warn') : ''}`} />{info.core.configured ? (info.core.registered ? 'yes' : 'not yet') : 'no'}</dd></div>
@@ -527,5 +528,25 @@ function About() {
         </dl>
       </Section>
     </div>
+  )
+}
+
+function SearchIndex() {
+  const { user } = useApp()
+  const { toast } = useToast()
+  const { data, reload } = useAsync(() => api.get<{ available: boolean; status?: { files: number; folders: number; text_read: number; text_pending: number; index_bytes: number } }>(`${V1}/search/status`), [])
+  useEffect(() => { if (!data?.status?.text_pending) return; const t = setInterval(reload, 5000); return () => clearInterval(t) }, [data?.status?.text_pending]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!data) return null
+  const st = data.status
+  return (
+    <Section title="Search" sub="Names everywhere, and the text inside documents (PDF, Word, Excel, PowerPoint, OpenDocument, EPUB, text and code). Kept current as files change; people only find what they can open."
+      actions={user?.role === 'admin' && data.available ? <button type="button" className="btn sm" onClick={async () => { try { await api.post(`${V1}/search/rebuild`); toast('Rebuilding the index'); setTimeout(reload, 1500) } catch (e) { toast((e as Error).message, 'err') } }}>Rebuild</button> : undefined}>
+      {!data.available || !st ? <p className="small muted">Search walks folders (the index could not be opened).</p> :
+        <dl className="set-dl">
+          <div><dt>Indexed</dt><dd>{st.files.toLocaleString()} files, {st.folders.toLocaleString()} folders</dd></div>
+          <div><dt>Documents read</dt><dd>{st.text_read.toLocaleString()}{st.text_pending > 0 && <span className="muted"> · {st.text_pending.toLocaleString()} still to read</span>}</dd></div>
+          <div><dt>Index size</dt><dd>{bytes(st.index_bytes)}</dd></div>
+        </dl>}
+    </Section>
   )
 }

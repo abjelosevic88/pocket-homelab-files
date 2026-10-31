@@ -24,6 +24,7 @@ import (
 
 	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"github.com/abjelosevic88/pocket-homelab-files/internal/config"
+	"github.com/abjelosevic88/pocket-homelab-files/internal/search"
 	"github.com/abjelosevic88/pocket-homelab-files/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-files/internal/vfs"
 )
@@ -63,6 +64,7 @@ type Server struct {
 	sealErr  error
 
 	clouds *cloudRunner
+	search *search.Index
 }
 
 // New creates a server.
@@ -118,6 +120,9 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	go s.housekeeping(ctx)
 	go s.pending.run(ctx)
 	go s.clouds.loop(ctx)
+	if err := s.openSearch(ctx); err != nil {
+		s.log.Warn("search index unavailable; searching walks folders instead", "err", err)
+	}
 	if s.core.Configured() {
 		go s.coreLoop(ctx)
 	}
@@ -237,6 +242,9 @@ func (s *Server) Router() http.Handler {
 				r.Post("/fs/rename", s.handleRename)
 				r.Post("/fs/delete", s.handleDelete)
 				r.Get("/fs/search", s.handleSearch)
+				r.Get("/search", s.handleGlobalSearch)
+				r.Get("/search/status", s.handleSearchStatus)
+				r.Post("/search/rebuild", s.handleSearchRebuild)
 				r.Get("/fs/usage", s.handleUsage)
 				r.Get("/fs/thumb", s.handleThumb)
 				r.Post("/fs/text", s.handleSaveText)

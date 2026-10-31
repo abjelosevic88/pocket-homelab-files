@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom'
 import { api, filesRoute, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { currentFolder } from '../lib/here'
-import type { Star } from '../lib/types'
+import type { SearchHit, Star } from '../lib/types'
+import { Snippet } from './Snippet'
 import { FileGlyph, Icon, type IconName } from './icons'
 
 export interface PaletteCommand { id: string; label: string; icon: IconName; hint?: string; keywords?: string; run: () => void }
@@ -18,6 +19,15 @@ export function CommandPalette({ onClose, commands }: { onClose: () => void; com
   const [stars, setStars] = useState<Star[]>([])
   const list = useRef<HTMLDivElement>(null)
   useEffect(() => { api.get<Star[]>(`${V1}/stars`).then(s => setStars((s || []).filter(x => !x.missing))).catch(() => {}) }, [])
+  // Everywhere you can go, names and text, as you type.
+  const [found, setFound] = useState<SearchHit[]>([])
+  useEffect(() => {
+    const term = q.trim()
+    if (term.length < 2) { setFound([]); return }
+    let live = true
+    const t = setTimeout(() => api.get<{ hits: SearchHit[] }>(`${V1}/search?limit=8&q=${encodeURIComponent(term)}`).then(r => { if (live) setFound(r.hits || []) }).catch(() => {}), 120)
+    return () => { live = false; clearTimeout(t) }
+  }, [q])
 
   type Row = { key: string; group: string; icon: React.ReactNode; label: React.ReactNode; sub?: React.ReactNode; hint?: string; run: () => void }
   const rows = useMemo<Row[]>(() => {
@@ -29,12 +39,18 @@ export function CommandPalette({ onClose, commands }: { onClose: () => void; com
     if (n) {
       const here = currentFolder()
       const where = here || { space: 'home', path: '/', name: 'My files' }
-      out.push({ key: 'search', group: 'Search', icon: <Icon name="search" size={16} />, label: <>Search {where.name} for “{q.trim()}”</>, sub: 'Names in this folder and every folder below it', run: () => navigate(filesRoute(where.space, where.path) + '?q=' + encodeURIComponent(q.trim())) })
+      out.push({ key: 'search', group: 'Search', icon: <Icon name="search" size={16} />, label: <>Search {where.name} for “{q.trim()}”</>, sub: 'Names and text in this folder and every folder below it', run: () => navigate(filesRoute(where.space, where.path) + '?q=' + encodeURIComponent(q.trim())) })
       if (here && (here.space !== 'home' || here.path !== '/')) out.push({ key: 'search-home', group: 'Search', icon: <Icon name="home" size={16} />, label: <>Search all of My files for “{q.trim()}”</>, run: () => navigate(filesRoute('home') + '?q=' + encodeURIComponent(q.trim())) })
+    }
+    for (const f of found) {
+      const place = f.space === 'home' ? 'My files' : spaces.find(s => s.id === f.space)?.name || ''
+      out.push({ key: 'f' + f.space + f.path, group: 'Files', icon: <FileGlyph name={f.name} mime="" isDir={f.is_dir} size={18} />, label: f.name,
+        sub: f.snippet ? <Snippet text={f.snippet} /> : `${place}${f.folder === '/' ? '' : f.folder}`,
+        run: () => navigate(f.is_dir ? filesRoute(f.space, f.path) : filesRoute(f.space, f.folder) + '?open=' + encodeURIComponent(f.name)) })
     }
     for (const s of spaces) {
       if (n && !hit(`${s.name} ${s.owner || ''} ${s.kind === 'mount' ? 'mount server' : s.kind === 'share' ? 'shared' : 'home my files'}`)) continue
-      const icon: IconName = s.kind === 'home' ? 'home' : s.kind === 'mount' ? 'disk' : s.is_dir ? 'folderShared' : 'file'
+      const icon: IconName = s.kind === 'home' ? 'home' : s.kind === 'mount' ? 'disk' : s.kind === 'cloud' ? 'cloud' : s.is_dir ? 'folderShared' : 'file'
       out.push({ key: 's' + s.id, group: 'Places', icon: <Icon name={icon} size={16} />, label: s.name, sub: s.kind === 'share' ? `from ${s.owner || 'someone'}${s.perm === 'view' ? ' · view only' : ''}` : s.kind === 'mount' ? `server folder${s.perm === 'view' ? ' · view only' : ''}` : undefined, run: () => navigate(filesRoute(s.id)) })
     }
     for (const s of stars) {
@@ -49,7 +65,7 @@ export function CommandPalette({ onClose, commands }: { onClose: () => void; com
       out.push({ key: c.id, group: 'Commands', icon: <Icon name={c.icon} size={16} />, label: c.label, hint: c.hint, run: c.run })
     }
     return out
-  }, [q, spaces, stars, commands, navigate])
+  }, [q, spaces, stars, commands, navigate, found])
   useEffect(() => setHi(0), [q])
   useEffect(() => { list.current?.querySelector(`[data-i="${hi}"]`)?.scrollIntoView({ block: 'nearest' }) }, [hi])
 

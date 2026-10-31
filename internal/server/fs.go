@@ -303,6 +303,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.touch()
+	s.indexTouch(sp, dir)
 	if e == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"skipped": true})
 		return
@@ -339,6 +340,7 @@ func (s *Server) handleMkdir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.touch()
+	s.indexTouch(sp, path.Dir(rel))
 	e, _ := sp.Stat(rel)
 	writeJSON(w, http.StatusCreated, e)
 }
@@ -376,6 +378,7 @@ func (s *Server) handleRename(w http.ResponseWriter, r *http.Request) {
 	}
 	s.followMove(r.Context(), sp, from, sp, got)
 	s.touch()
+	s.indexTouch(sp, path.Dir(from))
 	e, _ := sp.Stat(got)
 	writeJSON(w, http.StatusOK, e)
 }
@@ -453,8 +456,10 @@ func (s *Server) moveOrCopy(w http.ResponseWriter, r *http.Request, copyOnly boo
 			s.followMove(ctx, src, p, dst, got)
 		}
 		out = append(out, result{From: p, To: got})
+		s.indexTouch(src, path.Dir(p))
 	}
 	s.touch()
+	s.indexTouch(dst, in.ToPath)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -505,6 +510,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		s.publish(ctx, "files.deleted", "file:"+sp.ID+":"+p, me(r), map[string]any{"space": sp.ID, "path": p, "trash": sp.OwnerID != 0 && !in.Permanent})
+		s.indexTouch(sp, path.Dir(vfs.Clean(p)))
 	}
 	s.touch()
 	writeJSON(w, http.StatusOK, map[string]any{"trashed": trashed, "deleted": deleted, "errors": errs})
@@ -565,6 +571,7 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.store.DeleteTrash(ctx, it.ID)
 	s.touch()
+	s.indexTouch(home, path.Dir(got))
 	writeJSON(w, http.StatusOK, map[string]string{"path": got})
 }
 
@@ -605,6 +612,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	if q == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"entries": []vfs.Entry{}, "partial": false})
+		return
+	}
+	if s.search != nil {
+		s.indexedFolderSearch(w, r, sp)
 		return
 	}
 	terms := strings.Fields(q)
@@ -674,6 +685,7 @@ func (s *Server) handleSaveText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.touch()
+	s.indexTouch(sp, path.Dir(rel))
 	writeJSON(w, http.StatusOK, e)
 }
 

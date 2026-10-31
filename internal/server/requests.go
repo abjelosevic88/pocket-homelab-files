@@ -380,6 +380,7 @@ func (s *Server) handleFinishRequestUpload(w http.ResponseWriter, r *http.Reques
 	}
 	_ = s.store.CountRequestUpload(ctx, rq.ID, e.Size)
 	s.touch()
+	s.indexTouch(sp, rq.Path)
 	var extra reqUploadExtra
 	_ = json.Unmarshal([]byte(u.Extra), &extra)
 	s.publish(ctx, "files.request_received", "request:"+rq.ID, rq.OwnerID, map[string]any{"request": rq.ID, "title": rq.Title, "space": sp.ID, "path": e.Path, "name": e.Name, "size": e.Size, "from": extra.From})

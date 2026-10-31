@@ -405,6 +405,11 @@ func (s *Server) finishCloud(ctx context.Context, c *store.Cloud, before string,
 	}
 	_ = s.store.FinishCloudSync(ctx, c.ID, status, msg, files, size, err == nil)
 	s.touch()
+	if c.IntervalHours > 0 {
+		s.search.Touch("cloud:"+strconv.FormatInt(c.ID, 10), "/")
+	} else {
+		s.search.Touch("home:"+strconv.FormatInt(c.UserID, 10), optionsOf(c).Folder)
+	}
 	s.log.Info("cloud copy finished", "cloud", c.ID, "kind", c.Kind, "status", status, "copied", copied, "files", files, "err", msg)
 	link := s.cfg.BaseURL + "/settings/clouds"
 	switch {
@@ -779,6 +784,9 @@ func (s *Server) handleDeleteCloud(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.touch()
+	if moved != "" {
+		s.search.Touch("home:"+strconv.FormatInt(c.UserID, 10), moved)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "folder": moved})
 }
 
