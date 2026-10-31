@@ -63,25 +63,37 @@ var Endpoints = struct {
 	Dropbox: "https://api.dropboxapi.com/2",
 }
 
-// Read-only scopes everywhere: a connected drive is copied from, never written to.
+// Read-only scopes for one-way drives; write access only for two-way ones.
 
-func GoogleApp(id, secret string) *OAuthApp {
+func GoogleApp(id, secret string, write bool) *OAuthApp {
+	scope := "https://www.googleapis.com/auth/drive.readonly"
+	if write {
+		scope = "https://www.googleapis.com/auth/drive"
+	}
 	return &OAuthApp{Kind: "gdrive", AuthURL: Endpoints.GoogleAuth, TokenURL: Endpoints.GoogleToken, ClientID: id, ClientSecret: secret,
-		Scopes: "openid email https://www.googleapis.com/auth/drive.readonly",
+		Scopes: "openid email " + scope,
 		Extra:  url.Values{"access_type": {"offline"}, "prompt": {"consent"}, "include_granted_scopes": {"true"}}}
 }
 
-func MicrosoftApp(id, secret, tenant string) *OAuthApp {
+func MicrosoftApp(id, secret, tenant string, write bool) *OAuthApp {
 	if tenant == "" {
 		tenant = "common"
 	}
+	scopes := "offline_access User.Read Files.Read Files.Read.All"
+	if write {
+		scopes = "offline_access User.Read Files.ReadWrite Files.ReadWrite.All"
+	}
 	return &OAuthApp{Kind: "onedrive", AuthURL: fmt.Sprintf(Endpoints.MSAuth, tenant), TokenURL: fmt.Sprintf(Endpoints.MSToken, tenant),
-		ClientID: id, ClientSecret: secret, Scopes: "offline_access User.Read Files.Read Files.Read.All", Extra: url.Values{"prompt": {"select_account"}}}
+		ClientID: id, ClientSecret: secret, Scopes: scopes, Extra: url.Values{"prompt": {"select_account"}}}
 }
 
-func DropboxApp(key, secret string) *OAuthApp {
+func DropboxApp(key, secret string, write bool) *OAuthApp {
+	scopes := "account_info.read files.metadata.read files.content.read"
+	if write {
+		scopes += " files.content.write"
+	}
 	return &OAuthApp{Kind: "dropbox", AuthURL: Endpoints.DropboxAuth, TokenURL: Endpoints.DropboxToken, ClientID: key, ClientSecret: secret,
-		Scopes: "account_info.read files.metadata.read files.content.read", Extra: url.Values{"token_access_type": {"offline"}}}
+		Scopes: scopes, Extra: url.Values{"token_access_type": {"offline"}}}
 }
 
 // AuthCodeURL is where the browser goes to sign in.
@@ -193,4 +205,49 @@ func firstNonEmpty(v ...string) string {
 		}
 	}
 	return ""
+}
+
+// Refresh trades a refresh token for a new access token (keeping the refresh token when the
+// provider does not send a new one).
+func (a *OAuthApp) Refresh(ctx context.Context, hc *http.Client, refresh string) (*Token, error) {
+	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh}, "client_id": {a.ClientID}, "client_secret": {a.ClientSecret}}
+	req, err := http.NewRequestWithContext(ctx, "POST", a.TokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	res, err := hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	var out struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		Error        string `json:"error"`
+		Description  string `json:"error_description"`
+	}
+	_ = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&out)
+	if res.StatusCode != 200 || out.AccessToken == "" {
+		if out.Error == "invalid_grant" {
+			return nil, &AuthError{Msg: "the cloud no longer accepts this sign-in — connect the drive again"}
+		}
+		return nil, fmt.Errorf("token refresh failed: %s", firstNonEmpty(out.Description, out.Error, res.Status))
+	}
+	t := &Token{AccessToken: out.AccessToken, RefreshToken: firstNonEmpty(out.RefreshToken, refresh), TokenType: "Bearer"}
+	if out.ExpiresIn > 0 {
+		t.Expiry = time.Now().Add(time.Duration(out.ExpiresIn) * time.Second)
+	}
+	return t, nil
+}
+
+// ParseToken reads the token rclone keeps in a remote's options.
+func ParseToken(s string) (*Token, error) {
+	var t Token
+	if err := json.Unmarshal([]byte(s), &t); err != nil {
+		return nil, err
+	}
+	return &t, nil
 }

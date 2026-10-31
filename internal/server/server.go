@@ -319,6 +319,8 @@ func (s *Server) Router() http.Handler {
 				r.Post("/clouds/{id}/reconnect", s.handleCloudReconnect)
 				r.Post("/clouds/{id}/sync", s.handleCloudSync)
 				r.Post("/clouds/{id}/stop", s.handleCloudStop)
+				r.Get("/clouds/{id}/conflicts", s.handleCloudConflicts)
+				r.Post("/clouds/{id}/conflicts/{cid}", s.handleResolveConflict)
 			})
 			// Streams may run for hours: no timeout.
 			r.Get("/fs/raw", s.handleRaw)

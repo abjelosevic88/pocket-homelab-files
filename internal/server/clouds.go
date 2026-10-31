@@ -65,8 +65,8 @@ func (s *Server) cloudProviders(ctx context.Context) []cloudProvider {
 	}
 }
 
-func (s *Server) oauthApp(ctx context.Context, kind string) *clouds.OAuthApp {
-	return appFromCreds(kind, s.cloudAppFor(ctx, kind))
+func (s *Server) oauthApp(ctx context.Context, kind string, write bool) *clouds.OAuthApp {
+	return appFromCreds(kind, s.cloudAppFor(ctx, kind), write)
 }
 
 func providerName(kind string) string {
@@ -92,10 +92,21 @@ type cloudOptions struct {
 	Source       string `json:"source,omitempty"`         // only this folder of the cloud ("" = all of it)
 	DestSpace    string `json:"dest_space,omitempty"`     // a folder the person picked: "home" or "mount:N"
 	DestPath     string `json:"dest_path,omitempty"`
+	Direction    string `json:"direction,omitempty"` // one_way (default) | two_way
+	Conflict     string `json:"conflict,omitempty"`  // two-way: ask (default) | newer | cloud | pocket
+	Write        bool   `json:"write,omitempty"`     // the sign-in has write access
+	Ready        bool   `json:"ready,omitempty"`     // two-way: the first (union) run is done
 }
 
-// ownSpace reports whether the drive's copy is its own read-only place ("cloud:<id>").
+// ownSpace reports whether the drive's copy is its own place ("cloud:<id>"): read-only one way,
+// editable two way.
 func ownSpace(c *store.Cloud) bool { return c.IntervalHours > 0 && optionsOf(c).DestSpace == "" }
+
+// twoWay reports whether changes made here go back to the cloud.
+func twoWay(c *store.Cloud) bool { return c.IntervalHours > 0 && optionsOf(c).Direction == "two_way" }
+
+// writeless kinds sign in without scopes: what rclone can do is what the account can do.
+func writeless(kind string) bool { return kind == "icloud" || kind == "rclone" }
 
 func optionsOf(c *store.Cloud) cloudOptions {
 	var o cloudOptions
@@ -152,7 +163,11 @@ func (s *Server) destSpace(ctx context.Context, uid int64, id string) (*vfs.Spac
 func (s *Server) cloudSpace(c *store.Cloud) *vfs.Space {
 	dir := s.cloudDir(c)
 	_ = os.MkdirAll(dir, 0o755)
-	return &vfs.Space{ID: "cloud:" + strconv.FormatInt(c.ID, 10), Name: c.Name, Root: dir, Perm: vfs.View}
+	perm := vfs.View
+	if twoWay(c) {
+		perm = vfs.Edit
+	}
+	return &vfs.Space{ID: "cloud:" + strconv.FormatInt(c.ID, 10), Name: c.Name, Root: dir, Perm: perm}
 }
 
 // runtimeConfig is the remote as rclone needs it: the stored sign-in plus the box's OAuth client.
@@ -171,6 +186,9 @@ func (s *Server) runtimeConfig(c *store.Cloud) (clouds.Config, error) {
 	switch c.Kind {
 	case "gdrive":
 		cfg["type"], cfg["scope"] = "drive", "drive.readonly"
+		if optionsOf(c).Write {
+			cfg["scope"] = "drive"
+		}
 		cfg["client_id"], cfg["client_secret"] = app.ID, app.Secret
 	case "dropbox":
 		cfg["type"] = "dropbox"
@@ -230,6 +248,7 @@ type cloudProgress struct {
 type cloudRun struct {
 	cancel   context.CancelFunc
 	progress cloudProgress
+	force    bool // past the two-way "too many deletes" brake, once
 }
 
 type cloudRunner struct {
@@ -237,11 +256,12 @@ type cloudRunner struct {
 	mu      sync.Mutex
 	running map[int64]*cloudRun
 	pending map[int64]*clouds.Question // iCloud waiting for a code
+	force   map[int64]bool             // "Sync anyway" asked for the next run
 	sem     chan struct{}
 }
 
 func newCloudRunner(s *Server) *cloudRunner {
-	return &cloudRunner{s: s, running: map[int64]*cloudRun{}, pending: map[int64]*clouds.Question{}, sem: make(chan struct{}, s.cfg.CloudSyncConcurrency)}
+	return &cloudRunner{s: s, running: map[int64]*cloudRun{}, pending: map[int64]*clouds.Question{}, force: map[int64]bool{}, sem: make(chan struct{}, s.cfg.CloudSyncConcurrency)}
 }
 
 func (cr *cloudRunner) progress(id int64) *cloudProgress {
@@ -285,7 +305,12 @@ func (cr *cloudRunner) loop(ctx context.Context) {
 	cr.s.store.ResetSyncingClouds(ctx)
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
+	lastPrune := time.Time{}
 	for {
+		if time.Since(lastPrune) > time.Hour {
+			cr.s.pruneVersions()
+			lastPrune = time.Now()
+		}
 		list, _ := cr.s.store.AllClouds(ctx)
 		for i := range list {
 			if c := &list[i]; cr.due(c) {
@@ -319,7 +344,8 @@ func (cr *cloudRunner) start(parent context.Context, c *store.Cloud) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
-	run := &cloudRun{cancel: cancel, progress: cloudProgress{StartedAt: time.Now(), Waiting: true}}
+	run := &cloudRun{cancel: cancel, progress: cloudProgress{StartedAt: time.Now(), Waiting: true}, force: cr.force[c.ID]}
+	delete(cr.force, c.ID)
 	cr.running[c.ID] = run
 	cr.mu.Unlock()
 	_ = cr.s.store.SetCloudStatus(ctx, c.ID, "syncing", "")
@@ -342,7 +368,7 @@ func (cr *cloudRunner) start(parent context.Context, c *store.Cloud) {
 		run.progress.Waiting = false
 		run.progress.StartedAt = time.Now()
 		cr.mu.Unlock()
-		cr.s.syncCloud(ctx, c, func(st clouds.Stats) {
+		cr.s.syncCloud(ctx, c, run.force, func(st clouds.Stats) {
 			cr.mu.Lock()
 			run.progress.Bytes, run.progress.TotalBytes = st.Bytes, st.TotalBytes
 			run.progress.Files, run.progress.TotalFiles = st.Transfers, st.TotalTransfers
@@ -353,12 +379,17 @@ func (cr *cloudRunner) start(parent context.Context, c *store.Cloud) {
 }
 
 // syncCloud does one copy and records how it went.
-func (s *Server) syncCloud(ctx context.Context, c *store.Cloud, onStats func(clouds.Stats)) {
+func (s *Server) syncCloud(ctx context.Context, c *store.Cloud, force bool, onStats func(clouds.Stats)) {
 	bg := context.WithoutCancel(ctx)
 	before := c.Status
 	cfg, err := s.runtimeConfig(c)
 	if err != nil {
 		s.finishCloud(bg, c, before, err, 0)
+		return
+	}
+	if twoWay(c) {
+		copied, err := s.syncTwoWay(ctx, c, cfg, force, onStats)
+		s.finishCloud(bg, c, before, err, copied)
 		return
 	}
 	o := optionsOf(c)
@@ -481,7 +512,11 @@ type cloudView struct {
 	DestSpace    string           `json:"dest_space,omitempty"`
 	DestPath     string           `json:"dest_path,omitempty"`
 	DestName     string           `json:"dest_name,omitempty"` // the picked place's name, for display
-	Space        string           `json:"space,omitempty"`     // where to browse the copy
+	Direction    string           `json:"direction"`
+	Conflict     string           `json:"conflict,omitempty"`
+	Conflicts    int              `json:"conflicts"`
+	NeedsWrite   bool             `json:"needs_write,omitempty"` // two-way without a write sign-in yet
+	Space        string           `json:"space,omitempty"`       // where to browse the copy
 	Path         string           `json:"path,omitempty"`
 	NextSyncAt   *string          `json:"next_sync_at,omitempty"`
 	Progress     *cloudProgress   `json:"progress,omitempty"`
@@ -491,7 +526,12 @@ type cloudView struct {
 func (s *Server) viewCloud(c *store.Cloud) cloudView {
 	o := optionsOf(c)
 	v := cloudView{Cloud: *c, Provider: providerName(c.Kind), SharedWithMe: o.SharedWithMe, Folder: o.Folder, Source: o.Source,
-		DestSpace: o.DestSpace, DestPath: o.DestPath, Progress: s.clouds.progress(c.ID)}
+		DestSpace: o.DestSpace, DestPath: o.DestPath, Progress: s.clouds.progress(c.ID),
+		Direction: firstNonEmpty(o.Direction, "one_way"), Conflict: firstNonEmpty(o.Conflict, "ask"),
+		Conflicts: s.store.CountCloudConflicts(context.Background(), c.ID), NeedsWrite: twoWay(c) && !o.Write && !writeless(c.Kind)}
+	if c.IntervalHours == 0 {
+		v.Direction = "once"
+	}
 	if o.DestSpace != "" {
 		v.Space, v.Path = o.DestSpace, vfs.Clean(o.DestPath)
 		v.DestName = "My files"
@@ -552,16 +592,26 @@ type cloudIn struct {
 	Source        *string           `json:"source"`
 	DestSpace     string            `json:"dest_space"`
 	DestPath      string            `json:"dest_path"`
+	Direction     *string           `json:"direction"` // one_way | two_way (scheduled drives)
+	Conflict      *string           `json:"conflict"`  // ask | newer | cloud | pocket
 	Fields        map[string]string `json:"fields"`
 }
 
-// checkDest refuses a destination the person cannot write to, before anything is connected.
+func validConflict(p string) bool { return p == "ask" || p == "newer" || p == "cloud" || p == "pocket" }
+
+// checkDest refuses a destination the person cannot write to, before anything is connected,
+// and a two-way sync into the top of My files or a mount: everything there would go to the cloud.
 func (s *Server) checkDest(ctx context.Context, uid int64, in cloudIn) error {
 	if in.DestSpace == "" {
 		return nil
 	}
-	_, err := s.destSpace(ctx, uid, in.DestSpace)
-	return err
+	if _, err := s.destSpace(ctx, uid, in.DestSpace); err != nil {
+		return err
+	}
+	if in.Direction != nil && *in.Direction == "two_way" && vfs.Clean(in.DestPath) == "/" {
+		return badRequest("two-way sync needs a folder of its own: everything in it goes to the cloud too. Pick or make a folder (for example “Google Drive”)")
+	}
+	return nil
 }
 
 // newCloud makes the row for a fresh connection; one-time copies without a picked folder get
@@ -582,6 +632,13 @@ func (s *Server) newCloud(ctx context.Context, uid int64, in cloudIn, login stri
 	if in.Source != nil {
 		o.Source = strings.Trim(strings.TrimSpace(*in.Source), "/")
 	}
+	if in.Direction != nil && *in.Direction == "two_way" && c.IntervalHours > 0 {
+		o.Direction = "two_way"
+	}
+	if in.Conflict != nil && validConflict(*in.Conflict) {
+		o.Conflict = *in.Conflict
+	}
+	o.Write = writeless(in.Kind)
 	if in.DestSpace != "" {
 		o.DestSpace, o.DestPath = in.DestSpace, vfs.Clean(in.DestPath)
 	} else if c.IntervalHours == 0 {
@@ -778,15 +835,42 @@ func (s *Server) handleUpdateCloud(w http.ResponseWriter, r *http.Request) {
 		o.SharedWithMe = *in.SharedWithMe
 	}
 	if in.Source != nil {
-		o.Source = strings.Trim(strings.TrimSpace(*in.Source), "/")
+		if src := strings.Trim(strings.TrimSpace(*in.Source), "/"); src != o.Source {
+			o.Source, o.Ready = src, false // a different folder: the two-way listings start over
+		}
+	}
+	if in.Conflict != nil && validConflict(*in.Conflict) {
+		o.Conflict = *in.Conflict
+	}
+	if in.Direction != nil && c.IntervalHours > 0 {
+		dir := "one_way"
+		if *in.Direction == "two_way" {
+			dir = "two_way"
+		}
+		if dir == "two_way" && o.DestSpace != "" && vfs.Clean(o.DestPath) == "/" {
+			writeErr(w, http.StatusBadRequest, "two-way sync needs a folder of its own, not the top of "+map[bool]string{true: "My files", false: "a mount"}[o.DestSpace == "home"]+": connect the drive again into a folder")
+			return
+		}
+		if dir != firstNonEmpty(o.Direction, "one_way") {
+			// Either way, the next two-way run starts with a union of both sides (nothing deleted).
+			o.Direction, o.Ready = dir, false
+			_ = s.store.ClearCloudDocs(ctx, c.ID)
+			_ = os.RemoveAll(s.bisyncDir(c))
+		}
 	}
 	c.Options = o.json()
 	if err := s.store.UpdateCloud(ctx, c); err != nil {
 		s.fail(w, err, "cloud")
 		return
 	}
+	if twoWay(c) && !o.Write && !writeless(c.Kind) {
+		_ = s.store.SetCloudStatus(ctx, c.ID, "reconnect", "Two-way sync needs write access: sign in again")
+	} else if c.Status == "reconnect" && strings.HasPrefix(c.Error, "Two-way sync needs write access") {
+		_ = s.store.SetCloudStatus(ctx, c.ID, "idle", "")
+	}
 	s.touch()
-	writeJSON(w, http.StatusOK, s.viewCloud(c))
+	got, _ := s.store.CloudFor(ctx, c.UserID, c.ID)
+	writeJSON(w, http.StatusOK, s.viewCloud(got))
 }
 
 func (s *Server) handleCloudSync(w http.ResponseWriter, r *http.Request) {
@@ -799,6 +883,11 @@ func (s *Server) handleCloudSync(w http.ResponseWriter, r *http.Request) {
 	if c.Status == "reconnect" || c.Status == "code" {
 		writeErr(w, http.StatusConflict, "connect the drive again first")
 		return
+	}
+	if queryBool(r, "force") {
+		s.clouds.mu.Lock()
+		s.clouds.force[c.ID] = true
+		s.clouds.mu.Unlock()
 	}
 	s.clouds.start(ctx, c)
 	got, _ := s.store.CloudFor(ctx, c.UserID, c.ID)
@@ -873,13 +962,26 @@ func (s *Server) signState(v string) string {
 // handleCloudOAuthStart answers {url} for the browser; the connect choices ride in a signed cookie.
 func (s *Server) handleCloudOAuthStart(w http.ResponseWriter, r *http.Request) {
 	kind := chi.URLParam(r, "kind")
-	app := s.oauthApp(r.Context(), kind)
+	q := r.URL.Query()
+	// Write access only for two-way drives: a new one asked for so, or one being reconnected.
+	write := q.Get("direction") == "two_way"
+	if id, _ := strconv.ParseInt(q.Get("cloud"), 10, 64); id > 0 {
+		if c, err := s.store.CloudFor(r.Context(), me(r), id); err == nil {
+			write = twoWay(c)
+		}
+	}
+	app := s.oauthApp(r.Context(), kind, write)
 	if app == nil {
 		writeErr(w, http.StatusBadRequest, providerName(kind)+" is not set up on this box yet (the admin adds its OAuth client; see docs/clouds.md)")
 		return
 	}
-	q := r.URL.Query()
 	in := cloudIn{Kind: kind, Name: q.Get("name")}
+	if d := q.Get("direction"); d != "" {
+		in.Direction = &d
+	}
+	if p := q.Get("conflict"); p != "" {
+		in.Conflict = &p
+	}
 	if v, err := strconv.Atoi(q.Get("interval_hours")); err == nil {
 		in.IntervalHours = &v
 	}
@@ -896,7 +998,7 @@ func (s *Server) handleCloudOAuthStart(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "destination")
 		return
 	}
-	payload, _ := json.Marshal(map[string]any{"in": in, "cloud": q.Get("cloud"), "uid": me(r), "nonce": store.RandomToken(12)})
+	payload, _ := json.Marshal(map[string]any{"in": in, "cloud": q.Get("cloud"), "uid": me(r), "write": write, "nonce": store.RandomToken(12)})
 	val := base64.RawURLEncoding.EncodeToString(payload)
 	state := s.signState(val)
 	http.SetCookie(w, &http.Cookie{Name: cloudStateCookie, Value: val + "." + state, Path: "/api/v1/clouds/oauth/", MaxAge: 900,
@@ -930,12 +1032,13 @@ func (s *Server) handleCloudOAuthCallback(w http.ResponseWriter, r *http.Request
 		In    cloudIn `json:"in"`
 		Cloud string  `json:"cloud"`
 		UID   int64   `json:"uid"`
+		Write bool    `json:"write"`
 	}
 	if json.Unmarshal(raw, &st) != nil || st.UID != me(r) || st.In.Kind != kind {
 		fail("The sign-in does not match this account. Try again.")
 		return
 	}
-	app := s.oauthApp(r.Context(), kind)
+	app := s.oauthApp(r.Context(), kind, st.Write)
 	if app == nil {
 		fail(providerName(kind) + " is not set up on this box")
 		return
@@ -980,6 +1083,11 @@ func (s *Server) handleCloudOAuthCallback(w http.ResponseWriter, r *http.Request
 		fail(err.Error())
 		return
 	}
+	// Remember whether this sign-in may write (two-way needs it).
+	o := optionsOf(c)
+	o.Write = st.Write
+	c.Options = o.json()
+	_ = s.store.UpdateCloud(ctx, c)
 	s.clouds.start(ctx, c)
 	s.touch()
 	back("connected=" + strconv.FormatInt(c.ID, 10))

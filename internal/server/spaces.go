@@ -167,6 +167,18 @@ func (s *Server) davNames(ctx context.Context, uid int64) (shares map[string]*vf
 			}
 		}
 	}
+	// Connected drives with a place of their own sit beside the mounts (read-only one way).
+	if list, err := s.store.CloudsFor(ctx, uid); err == nil {
+		for i := range list {
+			if c := &list[i]; ownSpace(c) {
+				name := c.Name
+				if _, taken := mounts[name]; taken {
+					name = fmt.Sprintf("%s (%s)", c.Name, providerName(c.Kind))
+				}
+				mounts[name] = s.cloudSpace(c)
+			}
+		}
+	}
 	return
 }
 

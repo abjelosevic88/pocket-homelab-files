@@ -71,5 +71,8 @@ export interface Cloud {
   last_sync_at?: string; last_ok_at?: string; next_sync_at?: string; files: number; bytes: number; created_at: string
   shared_with_me?: boolean; folder?: string; source?: string; space?: string; path?: string
   dest_space?: string; dest_path?: string; dest_name?: string
+  direction: 'two_way' | 'one_way' | 'once'; conflict?: Policy; conflicts: number; needs_write?: boolean
   progress?: CloudProgress; question?: { name: string; help: string; error?: string }
 }
+export type Policy = 'ask' | 'newer' | 'cloud' | 'pocket'
+export interface CloudConflict { id: number; cloud_id: number; path: string; cloud_name: string; pocket_name: string; doc: boolean; created_at: string }

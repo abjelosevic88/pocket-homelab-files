@@ -293,3 +293,8 @@
 .setup-steps { outline: none; }
 .ext-link { white-space: nowrap; }
 .ext-link .icon { display: inline-block; vertical-align: -1px; margin-left: 3px; }
+
+/* Changed on both sides */
+.conflict-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; }
+.conflict-actions { flex-wrap: wrap; gap: 6px; }
+button.badge { border: 0; cursor: pointer; }

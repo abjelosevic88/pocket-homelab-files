@@ -24,8 +24,8 @@ export function useOffice(): OfficeStatus {
 
 const OFFICE_EXT = new Set(['docx', 'docm', 'dotx', 'doc', 'odt', 'rtf', 'xlsx', 'xlsm', 'xltx', 'xls', 'ods', 'csv', 'pptx', 'pptm', 'potx', 'ppt', 'odp'])
 
-/** A document Pocket Office edits, in a place it can reach (not a drive's read-only copy). */
-export function isOfficeDoc(e: Entry, space: string): boolean {
-  if (e.is_dir || space.startsWith('cloud:')) return false
+/** A document Pocket Office edits, in a place it can save to (a two-way drive, not a one-way copy). */
+export function isOfficeDoc(e: Entry, space: string, writable = true): boolean {
+  if (e.is_dir || (space.startsWith('cloud:') && !writable)) return false
   return OFFICE_EXT.has((e.name.split('.').pop() || '').toLowerCase())
 }

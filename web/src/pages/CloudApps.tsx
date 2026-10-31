@@ -30,13 +30,13 @@ function guide(app: CloudApp): { steps: React.ReactNode[]; note?: React.ReactNod
         <>Open {ext('https://console.cloud.google.com/auth/clients/create', 'Clients → Create client')}: type <b>Web application</b>. Under <b>Authorized redirect URIs</b> add exactly:{redirect}Then <b>Create</b>.</>,
         <>Copy the <b>Client ID</b> and <b>Client secret</b> it shows into the fields below.</>,
       ],
-      note: <>The first time someone connects, Google says <i>“Google hasn’t verified this app”</i>: tap <b>Advanced → Go to … (unsafe)</b>. That is expected for an app only your household uses. Pocket Files asks for read-only access.</>,
+      note: <>The first time someone connects, Google says <i>“Google hasn’t verified this app”</i>: tap <b>Advanced → Go to … (unsafe)</b>. That is expected for an app only your household uses. One-way drives ask for read-only access; two-way drives ask to see and change Drive files.</>,
     }
     case 'dropbox': return {
       steps: [
         <>Open the {ext('https://www.dropbox.com/developers/apps/create', 'Dropbox App Console → Create app')} and sign in with any Dropbox account.</>,
         <>Choose <b>Scoped access</b> and <b>Full Dropbox</b>, give it a name nobody else has used (for example “Pocket Files {domain}”), then <b>Create app</b>.</>,
-        <>On the <b>Permissions</b> tab tick <code>account_info.read</code>, <code>files.metadata.read</code> and <code>files.content.read</code>, then <b>Submit</b> at the bottom.</>,
+        <>On the <b>Permissions</b> tab tick <code>account_info.read</code>, <code>files.metadata.read</code>, <code>files.content.read</code> and, for two-way sync, <code>files.content.write</code>. Then <b>Submit</b> at the bottom.</>,
         <>On the <b>Settings</b> tab, under <b>OAuth 2 → Redirect URIs</b>, add exactly:{redirect}and press <b>Add</b>.</>,
         <>Still on Settings, copy the <b>App key</b> and the <b>App secret</b> (press Show) into the fields below.</>,
       ],
@@ -49,7 +49,7 @@ function guide(app: CloudApp): { steps: React.ReactNode[]; note?: React.ReactNod
         <>Under <b>Redirect URI</b> pick the platform <b>Web</b> and paste exactly:{redirect}Then <b>Register</b>.</>,
         <>On the app’s Overview, copy the <b>Application (client) ID</b> into the field below.</>,
         <>Open <b>Certificates &amp; secrets → New client secret</b>, choose 24 months, and copy its <b>Value</b> right away (not the “Secret ID”; the value is shown only once).</>,
-        <>Optional: under <b>API permissions</b> add Microsoft Graph delegated <code>Files.Read</code>, <code>Files.Read.All</code>, <code>User.Read</code> and <code>offline_access</code>. People are asked for these when they connect anyway.</>,
+        <>Optional: under <b>API permissions</b> add Microsoft Graph delegated <code>Files.ReadWrite</code>, <code>Files.ReadWrite.All</code>, <code>User.Read</code> and <code>offline_access</code> (one-way drives only use the read part). People are asked for these when they connect anyway.</>,
       ],
       note: <>Microsoft client secrets expire (at most 24 months). When it does, make a new one here; connected drives then ask to sign in again.</>,
     }

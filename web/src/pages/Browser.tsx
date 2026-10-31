@@ -47,7 +47,7 @@ export default function Browser() {
   const [preview, setPreview] = useState<number | null>(null)
   const [officeDoc, setOfficeDoc] = useState<Entry | null>(null)
   const office = useOffice()
-  const inOffice = (e: Entry) => office.available && isOfficeDoc(e, space)
+  const inOffice = (e: Entry) => office.available && isOfficeDoc(e, space, writable)
   const [dragOver, setDragOver] = useState(false)
   const [dropFolder, setDropFolder] = useState<string | null>(null)
   const [filter, setFilter] = useState('')

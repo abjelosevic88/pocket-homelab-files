@@ -4,8 +4,43 @@ Each person can connect their own Google Drive, Dropbox, OneDrive, iCloud Drive,
 [rclone](https://rclone.org) remote (S3, SFTP, WebDAV, pCloud, Mega, Box, …) in **Settings → Connected
 drives**. Nobody else sees them, admins included.
 
-A drive is copied **one way** into Pocket Files with rclone `copy`: nothing in the cloud is ever written,
-and a file deleted in the cloud stays here. Two ways to copy:
+Each drive syncs **two-way**, **one-way** or **once**, chosen per drive (Settings → Connected drives →
+Connect, or later in Edit for scheduled drives).
+
+## Two-way
+
+Edit in Pocket Files or in the cloud: changes, new files and deletions go both ways (rclone `bisync`,
+Path1 = cloud, Path2 = here). The drive's own place under Drives is editable, or it syncs with a folder
+you pick (not the top of My files or a mount: everything in that folder goes to the cloud too).
+
+- **First run** (and after switching direction or "Only this folder"): a union of both sides, newer wins
+  where both have a file, nothing deleted (`--resync --resync-mode newer`).
+- **Changed on both sides**, per drive: *Ask me* (default: both kept as `name.cloud.ext` and
+  `name.pocket.ext`, listed under "Pick versions" with Keep mine / Keep the cloud's / Keep both; the choice
+  is made here and the next sync, started at once, carries it), *The newer change wins*, *the cloud wins*,
+  *Pocket Files wins*.
+- **Nothing is lost silently**: whatever this side loses (overwritten, deleted, a losing conflict copy)
+  goes to `CLOUD_DIR/<user>/versions/<drive>/<date>` and is kept 30 days; the cloud side has its own
+  trash (Google Drive 30 days, Dropbox 30 days, OneDrive recycle bin).
+- **Brake**: a run that would delete more than 30% of the files, or finds every file changed on one side,
+  stops by itself ("stopped for safety … Sync anyway"); **Sync anyway** runs once with `--force`.
+- **Google Docs, Sheets and Slides** are not files in Drive, so bisync leaves them out
+  (`--drive-skip-gdocs`) and a pass of our own handles them: they arrive as .docx/.xlsx/.pptx; an edit made
+  here is uploaded **into the same Doc** (Drive API `files.update` with conversion: same link, sharing and
+  history; Google-only formatting may be simplified); a Doc changed in Google comes down again; a Doc
+  deleted here goes to Google's trash; both changed follows the drive's rule (Ask me keeps the Doc and puts
+  your edit beside it as `name.pocket.docx`). Drawings, Forms and Sites are left out.
+- **"Shared with me"** stays one-way even on a two-way drive: other people's files are never changed.
+- Two-way needs write access: Google `drive`, Dropbox `files.content.write`, Microsoft
+  `Files.ReadWrite(.All)`. Switching a one-way drive to two-way asks to sign in again once. iCloud and
+  rclone remotes can always write.
+- Office documents in a two-way drive open in Pocket Office (the drive appears in WebDAV under
+  `Mounts/<drive name>`).
+
+## One-way and once
+
+A one-way drive is copied with rclone `copy`: nothing in the cloud is ever written, and a file deleted in
+the cloud stays here. Two ways to copy:
 
 | | Where the copy lives | |
 | --- | --- | --- |
@@ -88,6 +123,10 @@ All routes need a signed-in person and only see that person's drives; other ids 
 | `PUT /api/v1/clouds/{id}` | `{name?, interval_hours?, shared_with_me?, source?}` |
 | `POST /api/v1/clouds/{id}/sync`, `/stop` | start now / stop the running copy |
 | `DELETE /api/v1/clouds/{id}[?keep=1]` | disconnect → `{ok, folder?}` |
+| `POST /api/v1/clouds/{id}/sync?force=1` | Sync anyway (past the two-way brake, once) |
+| `GET /api/v1/clouds/{id}/conflicts` | `[{id, path, cloud_name, pocket_name, doc, created_at}]` |
+| `POST /api/v1/clouds/{id}/conflicts/{cid}` | `{keep: "pocket" \| "cloud" \| "both"}` |
 
+`direction` is `two_way` or `one_way` (scheduled drives), `conflict` `ask|newer|cloud|pocket`.
 `interval_hours` 0 = copy once. `dest_space` is `home` or `mount:N` (writable for the person). A drive
 stays scheduled or one-time, and keeps its destination; only the schedule can change.

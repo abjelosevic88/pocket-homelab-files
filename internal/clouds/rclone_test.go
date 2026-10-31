@@ -3,10 +3,16 @@ package clouds
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestINIRoundTrip(t *testing.T) {
@@ -99,5 +105,46 @@ func TestCheck(t *testing.T) {
 	}
 	if _, err := r.Check(context.Background(), Config{"type": "nosuchbackend"}); err == nil {
 		t.Fatal("unknown backend passed the check")
+	}
+}
+
+func TestUploadIntoADoc(t *testing.T) {
+	var gotPath, gotType, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotType = r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery, r.Header.Get("Content-Type")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		if r.Header.Get("Authorization") != "Bearer live" {
+			w.WriteHeader(401)
+			return
+		}
+		io.WriteString(w, `{"modifiedTime":"2026-10-31T10:00:00.000Z"}`)
+	}))
+	defer srv.Close()
+	GoogleAPI = srv.URL
+	f := filepath.Join(t.TempDir(), "Plan.docx")
+	_ = os.WriteFile(f, []byte("docx bytes"), 0o644)
+	api := &DriveAPI{Token: &Token{AccessToken: "live", Expiry: time.Now().Add(time.Hour)}}
+	mt, err := api.UploadInto(context.Background(), "doc123", f, "docx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(gotPath, "PATCH /upload/drive/v3/files/doc123?uploadType=media") || !strings.Contains(gotType, "wordprocessingml") || gotBody != "docx bytes" || mt.IsZero() {
+		t.Fatalf("%s %s %q %v", gotPath, gotType, gotBody, mt)
+	}
+	// Without a sign-in that can be renewed, the drive asks to be connected again.
+	api = &DriveAPI{Token: &Token{AccessToken: "old", Expiry: time.Now().Add(-time.Hour)}}
+	if _, err := api.UploadInto(context.Background(), "doc123", f, "docx"); !errors.Is(err, ErrReconnect) {
+		t.Fatalf("expired sign-in: %v", err)
+	}
+}
+
+func TestConflictNames(t *testing.T) {
+	c, p := ConflictNames("Work/Plan.docx")
+	if c != "Work/Plan.cloud.docx" || p != "Work/Plan.pocket.docx" {
+		t.Fatal(c, p)
+	}
+	if got, ok := conflictPath("- WARNING  New or changed in both paths       - Work/Plan.docx"); !ok || got != "Work/Plan.docx" {
+		t.Fatal(got)
 	}
 }

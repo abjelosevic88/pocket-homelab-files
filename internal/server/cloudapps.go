@@ -52,17 +52,17 @@ func (s *Server) cloudAppFor(ctx context.Context, kind string) cloudAppCreds {
 
 func (cr cloudAppCreds) ready() bool { return cr.ID != "" && cr.Secret != "" }
 
-func appFromCreds(kind string, cr cloudAppCreds) *clouds.OAuthApp {
+func appFromCreds(kind string, cr cloudAppCreds, write bool) *clouds.OAuthApp {
 	if !cr.ready() {
 		return nil
 	}
 	switch kind {
 	case "gdrive":
-		return clouds.GoogleApp(cr.ID, cr.Secret)
+		return clouds.GoogleApp(cr.ID, cr.Secret, write)
 	case "dropbox":
-		return clouds.DropboxApp(cr.ID, cr.Secret)
+		return clouds.DropboxApp(cr.ID, cr.Secret, write)
 	case "onedrive":
-		return clouds.MicrosoftApp(cr.ID, cr.Secret, cr.Tenant)
+		return clouds.MicrosoftApp(cr.ID, cr.Secret, cr.Tenant, write)
 	}
 	return nil
 }
@@ -178,7 +178,7 @@ func (s *Server) handleDeleteCloudApp(w http.ResponseWriter, r *http.Request) {
 // checkCloudApp asks the provider's token endpoint to trade a made-up code. A wrong client
 // is refused as such ("invalid_client"); a right one only complains about the code.
 func (s *Server) checkCloudApp(ctx context.Context, kind string, cr cloudAppCreds) (bool, string) {
-	app := appFromCreds(kind, cr)
+	app := appFromCreds(kind, cr, false)
 	if app == nil {
 		return false, "the client ID and secret are both needed"
 	}

@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"github.com/abjelosevic88/pocket-homelab-files/internal/store"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -245,5 +247,135 @@ func TestCloudAppsAdminOnlyAndSettingsWin(t *testing.T) {
 	a.do("DELETE", "/api/v1/clouds/apps/gdrive", nil)
 	if cr := s.cloudAppFor(t.Context(), "gdrive"); cr.Source != "env" {
 		t.Fatalf("after delete: %+v", cr)
+	}
+}
+
+// twoWayDrive connects a local folder ("the cloud") as a two-way drive with its own place.
+func twoWayDrive(t *testing.T, a *client, cloud string, policy string) float64 {
+	t.Helper()
+	res, d := a.do("POST", "/api/v1/clouds", map[string]any{"kind": "rclone", "name": "Box", "interval_hours": 6, "direction": "two_way", "conflict": policy,
+		"fields": map[string]string{"config": fmt.Sprintf("[x]\ntype = alias\nremote = %s\n", cloud)}})
+	if res.Code != http.StatusCreated || d["direction"] != "two_way" {
+		t.Fatalf("create: %d %v", res.Code, d)
+	}
+	return d["id"].(float64)
+}
+
+func syncNow(t *testing.T, a *client, id float64, want string) map[string]any {
+	t.Helper()
+	time.Sleep(1100 * time.Millisecond) // file times must move on for rclone to see a change
+	a.do("POST", fmt.Sprintf("/api/v1/clouds/%d/sync", int(id)), nil)
+	time.Sleep(150 * time.Millisecond)
+	return waitCloud(t, a, id, want)
+}
+
+func TestTwoWaySyncCarriesEditsBothWaysAndAsksOnConflicts(t *testing.T) {
+	s, h := testServer(t)
+	a := newPerson(t, s, h, "a@example.com", "admin")
+	cloud := remoteFixture(t)
+	for i := 0; i < 12; i++ {
+		_ = os.WriteFile(filepath.Join(cloud, fmt.Sprintf("f%02d.txt", i)), []byte("x"), 0o644)
+	}
+	id := twoWayDrive(t, a, cloud, "ask")
+	waitCloud(t, a, id, "idle")
+	sp := fmt.Sprintf("cloud:%d", int(id))
+	local := filepath.Join(s.cfg.CloudDir, "1", fmt.Sprint(int(id)))
+
+	// The place is editable, and an edit here reaches the cloud.
+	if res, l := a.do("GET", "/api/v1/fs/list?space="+sp+"&path=/", nil); res.Code != 200 || l["writable"] != true {
+		t.Fatalf("not editable: %d %v", res.Code, l)
+	}
+	upload(t, a, sp, "/", "from-pocket.txt", "made here")
+	_ = os.WriteFile(filepath.Join(cloud, "from-cloud.txt"), []byte("made there"), 0o644)
+	syncNow(t, a, id, "idle")
+	if b, _ := os.ReadFile(filepath.Join(cloud, "from-pocket.txt")); string(b) != "made here" {
+		t.Fatalf("edit here did not reach the cloud: %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(local, "from-cloud.txt")); string(b) != "made there" {
+		t.Fatalf("cloud edit did not arrive: %q", b)
+	}
+
+	// Both sides change notes.txt: both kept, listed under conflicts.
+	_ = os.WriteFile(filepath.Join(cloud, "notes.txt"), []byte("cloud version"), 0o644)
+	_ = os.WriteFile(filepath.Join(local, "notes.txt"), []byte("pocket version"), 0o644)
+	got := syncNow(t, a, id, "idle")
+	if got["conflicts"].(float64) != 1 {
+		t.Fatalf("conflict not listed: %v", got)
+	}
+	list := a.list("GET", fmt.Sprintf("/api/v1/clouds/%d/conflicts", int(id)), nil)
+	if len(list) != 1 || list[0]["path"] != "notes.txt" || list[0]["pocket_name"] != "notes.pocket.txt" {
+		t.Fatalf("conflicts: %v", list)
+	}
+	// Keep mine: after the next sync both sides hold this side's text under the original name.
+	if res, _ := a.do("POST", fmt.Sprintf("/api/v1/clouds/%d/conflicts/%d", int(id), int(list[0]["id"].(float64))), map[string]any{"keep": "pocket"}); res.Code != 200 {
+		t.Fatalf("resolve: %d", res.Code)
+	}
+	time.Sleep(300 * time.Millisecond)
+	waitCloud(t, a, id, "idle")
+	syncNow(t, a, id, "idle")
+	if b, _ := os.ReadFile(filepath.Join(cloud, "notes.txt")); string(b) != "pocket version" {
+		t.Fatalf("cloud has %q after keeping mine", b)
+	}
+	for _, n := range []string{"notes.cloud.txt", "notes.pocket.txt"} {
+		if _, err := os.Stat(filepath.Join(cloud, n)); err == nil {
+			t.Fatalf("%s left in the cloud", n)
+		}
+	}
+	// The cloud's version was kept as a version here.
+	found := false
+	_ = filepath.WalkDir(s.versionsDir(&store.Cloud{ID: int64(id), UserID: 1}), func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(p, "notes.cloud.txt") {
+			found = true
+		}
+		return nil
+	})
+	if !found {
+		t.Fatal("the losing version was not kept")
+	}
+
+	// A delete here deletes in the cloud.
+	a.do("POST", "/api/v1/fs/delete", map[string]any{"space": sp, "paths": []string{"/from-cloud.txt"}})
+	syncNow(t, a, id, "idle")
+	if _, err := os.Stat(filepath.Join(cloud, "from-cloud.txt")); err == nil {
+		t.Fatal("delete here did not reach the cloud")
+	}
+
+	// Deleting most of the cloud at once trips the brake; Sync anyway goes through.
+	for i := 0; i < 12; i++ {
+		_ = os.Remove(filepath.Join(cloud, fmt.Sprintf("f%02d.txt", i)))
+	}
+	got = syncNow(t, a, id, "error")
+	if !strings.Contains(got["error"].(string), "Sync anyway") {
+		t.Fatalf("no safety stop: %v", got)
+	}
+	if _, err := os.Stat(filepath.Join(local, "f00.txt")); err != nil {
+		t.Fatal("files deleted despite the stop")
+	}
+	time.Sleep(1100 * time.Millisecond)
+	a.do("POST", fmt.Sprintf("/api/v1/clouds/%d/sync?force=1", int(id)), nil)
+	time.Sleep(150 * time.Millisecond)
+	waitCloud(t, a, id, "idle")
+	if _, err := os.Stat(filepath.Join(local, "f00.txt")); err == nil {
+		t.Fatal("Sync anyway did not apply the deletes")
+	}
+}
+
+func TestTwoWayNeedsAFolderOfItsOwnAndWriteAccess(t *testing.T) {
+	s, h := testServer(t)
+	a := newPerson(t, s, h, "a@example.com", "admin")
+	cloud := remoteFixture(t)
+	res, _ := a.do("POST", "/api/v1/clouds", map[string]any{"kind": "rclone", "interval_hours": 6, "direction": "two_way", "dest_space": "home", "dest_path": "/",
+		"fields": map[string]string{"config": fmt.Sprintf("[x]\ntype = alias\nremote = %s\n", cloud)}})
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("two-way into the top of My files: %d", res.Code)
+	}
+	// An OAuth drive switched to two-way without a write sign-in asks to sign in again.
+	c := &store.Cloud{UserID: 1, Kind: "gdrive", Name: "G", IntervalHours: 6, Options: `{}`}
+	if err := s.store.CreateCloud(t.Context(), c); err != nil {
+		t.Fatal(err)
+	}
+	_, v := a.do("PUT", fmt.Sprintf("/api/v1/clouds/%d", c.ID), map[string]any{"direction": "two_way"})
+	if v["status"] != "reconnect" || v["needs_write"] != true {
+		t.Fatalf("two-way without write access: %v", v)
 	}
 }
