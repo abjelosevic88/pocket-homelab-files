@@ -5,6 +5,7 @@ import { api, filesRoute, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { bytes } from '../lib/format'
 import type { Space, SystemInfo } from '../lib/types'
+import { CloudLogo } from './CloudLogo'
 import { Icon, type IconName } from './icons'
 import { newItems, type NewKind } from './Layout'
 import { type Anchor, Menu, rectOf } from './ui'
@@ -90,7 +91,7 @@ function SpaceRow({ space, onNavigate }: { space: Space; onNavigate: () => void 
   return (
     <li className="cal-row space-row">
       <NavLink to={to} onClick={onNavigate} className={`cal-check ${active ? 'is-active' : ''}`} title={space.owner ? `${space.name} — from ${space.owner}` : space.name}>
-        <span className="space-ico" style={{ color: space.color || (space.kind === 'mount' ? 'var(--muted)' : space.kind === 'cloud' ? '#0891b2' : '#8b5cf6') }}><Icon name={icon} size={16} /></span>
+        <span className="space-ico" style={{ color: space.color || (space.kind === 'mount' ? 'var(--muted)' : space.kind === 'cloud' ? '#0891b2' : '#8b5cf6') }}>{space.kind === 'cloud' ? <CloudLogo kind={space.cloud} size={16} /> : <Icon name={icon} size={16} />}</span>
         <span className="cal-name ellipsis">{space.name}</span>
         {space.perm === 'view' && space.kind !== 'cloud' && <span className="space-flag" title="View only"><Icon name="lock" size={12} /></span>}
         {space.owner && <span className="space-owner ellipsis">{space.owner}</span>}
