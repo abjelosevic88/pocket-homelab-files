@@ -26,6 +26,8 @@ FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata curl \
  && addgroup -g 1000 app && adduser -u 1000 -G app -D -h /data app
 COPY --from=build /out/pocket-files /usr/local/bin/pocket-files
+# rclone copies connected drives (Google Drive, Dropbox, OneDrive, iCloud Drive, any rclone remote).
+COPY --from=rclone/rclone:1.74 /usr/local/bin/rclone /usr/local/bin/rclone
 ENV DATA_DIR=/data PORT=8080 HOST=0.0.0.0
 VOLUME ["/data"]
 EXPOSE 8080 8081

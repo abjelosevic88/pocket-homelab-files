@@ -83,3 +83,16 @@ pocket-files version
 ```
 
 Back up `DATA_DIR` (or at least the database, `files/` and `sends/`); `thumbs/` can be skipped.
+
+## Connected drives
+
+See [clouds.md](clouds.md).
+
+| Variable | Default | |
+| --- | --- | --- |
+| `CLOUD_DIR` | `DATA_DIR/cloud` | copies of scheduled drives, `<user>/<drive>`; put it on the same disk as `FILES_DIR` so "keep the copy" is a rename |
+| `CLOUD_SYNC_CONCURRENCY` | `2` | drives copied at once |
+| `RCLONE` | `rclone` | the rclone binary (the image ships 1.74) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | Google Drive OAuth client (Web application) |
+| `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` | | Dropbox app |
+| `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT` | tenant `common` | OneDrive app registration |

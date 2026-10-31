@@ -46,6 +46,8 @@ func (s *Server) viewOf(ctx context.Context, uid int64, sp *vfs.Space) spaceView
 		v.Kind = "home"
 	case strings.HasPrefix(sp.ID, "mount:"):
 		v.Kind = "mount"
+	case strings.HasPrefix(sp.ID, "cloud:"):
+		v.Kind, v.ReadOnly = "cloud", true
 	default:
 		v.Kind = "share"
 		if u, err := s.store.GetUser(ctx, sp.OwnerID); err == nil && u.ID != uid {

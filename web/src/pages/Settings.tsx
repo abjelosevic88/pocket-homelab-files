@@ -8,12 +8,13 @@ import { EXPIRY_OPTIONS, DOWNLOAD_OPTIONS } from '../lib/sends'
 import type { APIToken, Access, Mount, Person, Perm, Settings as S, SystemInfo, User } from '../lib/types'
 import { Icon, type IconName } from '../components/icons'
 import { Avatar } from '../components/people'
+import { Clouds } from './Clouds'
 import { downloadsLabel } from '../components/SendOptions'
 import { LAST_KEY } from '../components/Layout'
 import { Select } from '../components/Select'
 import { Confirm, CopyField, Field, Loading, Modal, Segmented, SettingRow, Tabs, Toggle, useAsync, useIsMobile, useToast } from '../components/ui'
 
-type TabId = 'profile' | 'general' | 'links' | 'alerts' | 'email' | 'webdav' | 'mounts' | 'people' | 'about'
+type TabId = 'profile' | 'general' | 'links' | 'alerts' | 'email' | 'webdav' | 'clouds' | 'mounts' | 'people' | 'about'
 
 const TABS: { id: TabId; label: string; icon: IconName; sub: string; admin?: boolean }[] = [
   { id: 'profile', label: 'Profile', icon: 'user', sub: 'Your name, email, WebDAV user name and password.' },
@@ -22,6 +23,7 @@ const TABS: { id: TabId; label: string; icon: IconName; sub: string; admin?: boo
   { id: 'alerts', label: 'Notifications', icon: 'bell', sub: 'A push when a link of yours is downloaded or files arrive through an upload link.' },
   { id: 'email', label: 'Email', icon: 'mail', sub: 'Your own mail account for emailing links, and the wording of those emails.' },
   { id: 'webdav', label: 'WebDAV & apps', icon: 'key', sub: 'Mount your drive in Finder, Explorer or Files on iPhone; app passwords for it.' },
+  { id: 'clouds', label: 'Connected drives', icon: 'cloud', sub: 'Copy Google Drive, Dropbox, OneDrive, iCloud Drive or any rclone remote into Pocket Files, on a schedule or once.' },
   { id: 'mounts', label: 'Mounts', icon: 'disk', sub: 'Server folders shown in the sidebar for the people you pick.', admin: true },
   { id: 'people', label: 'People', icon: 'users', sub: 'Everyone who has an account on this box.', admin: true },
   { id: 'about', label: 'About', icon: 'info', sub: 'Version, storage, the share listener and Pocket Core.' },
@@ -83,6 +85,7 @@ export default function Settings() {
             {tab === 'alerts' && <Alerts />}
             {tab === 'email' && <EmailSettings />}
             {tab === 'webdav' && <WebDAV />}
+            {tab === 'clouds' && <Clouds />}
             {tab === 'mounts' && admin && <Mounts />}
             {tab === 'people' && admin && <People />}
             {tab === 'about' && <About />}
@@ -94,7 +97,7 @@ export default function Settings() {
 }
 
 /** A settings card: title, explanation, actions on the right — Pocket Calendar's section. */
-function Section({ title, sub, actions, children }: { title: React.ReactNode; sub?: React.ReactNode; actions?: React.ReactNode; children?: React.ReactNode }) {
+export function Section({ title, sub, actions, children }: { title: React.ReactNode; sub?: React.ReactNode; actions?: React.ReactNode; children?: React.ReactNode }) {
   return (
     <section className="set-section">
       <div className="set-section-head">

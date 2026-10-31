@@ -18,6 +18,7 @@ export function Sidebar({ onNew, onNavigate }: { onNew: (k: NewKind) => void; on
   const title = settings?.title || status?.title || 'Pocket Files'
   const mounts = spaces.filter(s => s.kind === 'mount')
   const shared = spaces.filter(s => s.kind === 'share')
+  const drives = spaces.filter(s => s.kind === 'cloud')
   const homeActive = loc.pathname === '/' || loc.pathname.startsWith('/f/home')
   const nav: { to: string; label: string; icon: IconName; active?: boolean; count?: number }[] = [
     { to: filesRoute('home'), label: 'My files', icon: 'home', active: homeActive },
@@ -49,6 +50,7 @@ export function Sidebar({ onNew, onNavigate }: { onNew: (k: NewKind) => void; on
       </nav>
 
       {mounts.length > 0 && <SpaceGroup title="Mounts" list={mounts} onNavigate={onNavigate} />}
+      {drives.length > 0 && <SpaceGroup title="Drives" list={drives} onNavigate={onNavigate} />}
       {shared.length > 0 && <SpaceGroup title="Shared with me" list={shared} onNavigate={onNavigate} limit={12} />}
 
       {info && <div className="sb-usage" title={`${bytes(info.home.size)} in ${info.home.files} files · ${bytes(info.disk.free)} free on the server`}>
@@ -84,13 +86,13 @@ function SpaceRow({ space, onNavigate }: { space: Space; onNavigate: () => void 
   const to = filesRoute(space.id)
   let active = false
   try { active = decodeURIComponent(loc.pathname) === decodeURIComponent(to) || decodeURIComponent(loc.pathname).startsWith(decodeURIComponent(to) + '/') } catch { active = false }
-  const icon: IconName = space.kind === 'mount' ? 'disk' : space.is_dir ? 'folderShared' : 'file'
+  const icon: IconName = space.kind === 'mount' ? 'disk' : space.kind === 'cloud' ? 'cloud' : space.is_dir ? 'folderShared' : 'file'
   return (
     <li className="cal-row space-row">
       <NavLink to={to} onClick={onNavigate} className={`cal-check ${active ? 'is-active' : ''}`} title={space.owner ? `${space.name} — from ${space.owner}` : space.name}>
-        <span className="space-ico" style={{ color: space.color || (space.kind === 'mount' ? 'var(--muted)' : '#8b5cf6') }}><Icon name={icon} size={16} /></span>
+        <span className="space-ico" style={{ color: space.color || (space.kind === 'mount' ? 'var(--muted)' : space.kind === 'cloud' ? '#0891b2' : '#8b5cf6') }}><Icon name={icon} size={16} /></span>
         <span className="cal-name ellipsis">{space.name}</span>
-        {space.perm === 'view' && <span className="space-flag" title="View only"><Icon name="lock" size={12} /></span>}
+        {space.perm === 'view' && space.kind !== 'cloud' && <span className="space-flag" title="View only"><Icon name="lock" size={12} /></span>}
         {space.owner && <span className="space-owner ellipsis">{space.owner}</span>}
       </NavLink>
     </li>

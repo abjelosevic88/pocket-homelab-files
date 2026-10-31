@@ -5,7 +5,7 @@ export interface Person { id: number; name: string; email: string }
 export interface AuthStatus { needs_setup: boolean; auth_mode: string; authenticated: boolean; user: User | null; version: string; title: string; oidc?: boolean; oidc_name?: string; core_configured?: boolean }
 
 export type Perm = 'view' | 'edit'
-export interface Space { id: string; kind: 'home' | 'mount' | 'share'; name: string; perm: Perm; is_dir: boolean; owner?: string; color?: string; read_only?: boolean }
+export interface Space { id: string; kind: 'home' | 'mount' | 'share' | 'cloud'; name: string; perm: Perm; is_dir: boolean; owner?: string; color?: string; read_only?: boolean; cloud?: string }
 
 export interface Entry { name: string; path: string; is_dir: boolean; size: number; modified: string; mime: string; starred?: boolean; shared?: number }
 export interface Listing { space: Space; path: string; entry: Entry; entries: Entry[]; writable: boolean }
@@ -57,4 +57,17 @@ export interface SystemInfo {
   home: { files: number; size: number }; disk: { free: number; total: number }
   max_send_mb: number; max_send_days: number; mounting: boolean
   box_counts?: Record<string, number>; data_dir?: string; mount_roots?: string[]
+}
+
+// Connected drives (docs/clouds.md)
+export type CloudKind = 'gdrive' | 'dropbox' | 'onedrive' | 'icloud' | 'rclone'
+export interface CloudField { key: string; label: string; secret?: boolean; multiline?: boolean; placeholder?: string }
+export interface CloudProvider { kind: CloudKind; name: string; auth: 'oauth' | 'form'; configured: boolean; fields?: CloudField[]; help: string }
+export interface CloudProgress { started_at: string; waiting?: boolean; bytes: number; total_bytes: number; files: number; total_files: number; checked: number; speed: number; eta?: number }
+export interface Cloud {
+  id: number; kind: CloudKind; provider: string; name: string; login?: string
+  interval_hours: number; status: 'idle' | 'syncing' | 'error' | 'reconnect' | 'code' | 'done'; error?: string
+  last_sync_at?: string; last_ok_at?: string; next_sync_at?: string; files: number; bytes: number; created_at: string
+  shared_with_me?: boolean; folder?: string; source?: string; space?: string; path?: string
+  progress?: CloudProgress; question?: { name: string; help: string; error?: string }
 }

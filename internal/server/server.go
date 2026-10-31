@@ -57,6 +57,12 @@ type Server struct {
 
 	secretOnce sync.Once
 	secretKey  []byte
+
+	sealOnce sync.Once
+	sealKey  []byte
+	sealErr  error
+
+	clouds *cloudRunner
 }
 
 // New creates a server.
@@ -66,6 +72,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 	s.core = core.New(cfg.CoreURL, core.Options{DB: st.DB, TokenFile: cfg.DataDir + "/core.token", UserAgent: ua, ServiceCache: time.Minute, ServiceStale: 15 * time.Minute})
 	s.oidc = &oidcProvider{issuerURL: cfg.OIDCIssuer}
 	s.pending = newNotifyQueue(s)
+	s.clouds = newCloudRunner(s)
 	return s
 }
 
@@ -74,7 +81,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	if err := s.core.Start(ctx); err != nil {
 		return err
 	}
-	for _, d := range []string{s.cfg.FilesDir, s.cfg.SendsDir, s.cfg.TrashDir, s.cfg.ThumbsDir, filepath.Join(s.cfg.DataDir, "uploads")} {
+	for _, d := range []string{s.cfg.FilesDir, s.cfg.SendsDir, s.cfg.TrashDir, s.cfg.ThumbsDir, s.cfg.CloudDir, filepath.Join(s.cfg.DataDir, "uploads")} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return fmt.Errorf("create %s: %w", d, err)
 		}
@@ -110,6 +117,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	s.touch()
 	go s.housekeeping(ctx)
 	go s.pending.run(ctx)
+	go s.clouds.loop(ctx)
 	if s.core.Configured() {
 		go s.coreLoop(ctx)
 	}
@@ -284,6 +292,18 @@ func (s *Server) Router() http.Handler {
 				r.Delete("/tokens/{id}", s.handleDeleteToken)
 
 				r.Get("/backup", s.handleBackup)
+
+				r.Get("/clouds/providers", s.handleCloudProviders)
+				r.Get("/clouds", s.handleListClouds)
+				r.Post("/clouds", s.handleCreateCloud)
+				r.Get("/clouds/oauth/{kind}/start", s.handleCloudOAuthStart)
+				r.Get("/clouds/oauth/{kind}/callback", s.handleCloudOAuthCallback)
+				r.Put("/clouds/{id}", s.handleUpdateCloud)
+				r.Delete("/clouds/{id}", s.handleDeleteCloud)
+				r.Post("/clouds/{id}/code", s.handleCloudCode)
+				r.Post("/clouds/{id}/reconnect", s.handleCloudReconnect)
+				r.Post("/clouds/{id}/sync", s.handleCloudSync)
+				r.Post("/clouds/{id}/stop", s.handleCloudStop)
 			})
 			// Streams may run for hours: no timeout.
 			r.Get("/fs/raw", s.handleRaw)

@@ -26,6 +26,7 @@ type Config struct {
 	SendsDir       string // uploaded send blobs
 	TrashDir       string
 	ThumbsDir      string
+	CloudDir       string // copies of connected drives, one folder per drive
 	LogLevel       string
 	LogFormat      string // text | json
 	TrustProxy     bool
@@ -57,6 +58,18 @@ type Config struct {
 
 	NotifyURL  string
 	NotifyKind string // apprise | ntfy | webhook
+
+	// Connected drives (docs/clouds.md): rclone does the copying; the OAuth
+	// clouds need the box owner's own client registrations.
+	Rclone                string
+	CloudSyncConcurrency  int
+	GoogleClientID        string
+	GoogleClientSecret    string
+	MicrosoftClientID     string
+	MicrosoftClientSecret string
+	MicrosoftTenant       string
+	DropboxAppKey         string
+	DropboxAppSecret      string
 
 	// SMTP for the owner, seeded once into their email settings.
 	SMTPHost, SMTPUser, SMTPPassword, SMTPFrom, SMTPFromName, SMTPTLS string
@@ -120,6 +133,7 @@ func Load() (*Config, error) {
 		SendsDir:       env("SENDS_DIR", dataDir+"/sends"),
 		TrashDir:       env("TRASH_DIR", dataDir+"/trash"),
 		ThumbsDir:      env("THUMBS_DIR", dataDir+"/thumbs"),
+		CloudDir:       env("CLOUD_DIR", dataDir+"/cloud"),
 		LogLevel:       strings.ToLower(env("LOG_LEVEL", "info")),
 		LogFormat:      strings.ToLower(env("LOG_FORMAT", "text")),
 		TrustProxy:     envBool("TRUST_PROXY", true),
@@ -147,6 +161,16 @@ func Load() (*Config, error) {
 
 		NotifyURL:  env("NOTIFY_URL", ""),
 		NotifyKind: strings.ToLower(env("NOTIFY_KIND", "apprise")),
+
+		Rclone:                env("RCLONE", "rclone"),
+		CloudSyncConcurrency:  envInt("CLOUD_SYNC_CONCURRENCY", 2),
+		GoogleClientID:        env("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret:    env("GOOGLE_CLIENT_SECRET", ""),
+		MicrosoftClientID:     env("MICROSOFT_CLIENT_ID", ""),
+		MicrosoftClientSecret: env("MICROSOFT_CLIENT_SECRET", ""),
+		MicrosoftTenant:       env("MICROSOFT_TENANT", "common"),
+		DropboxAppKey:         env("DROPBOX_APP_KEY", ""),
+		DropboxAppSecret:      env("DROPBOX_APP_SECRET", ""),
 
 		SMTPHost:     env("SMTP_HOST", ""),
 		SMTPPort:     envInt("SMTP_PORT", 587),
@@ -189,6 +213,9 @@ func Load() (*Config, error) {
 	}
 	if c.PublicPort < 0 || c.PublicPort > 65535 || (c.PublicPort != 0 && c.PublicPort == c.Port) {
 		return nil, fmt.Errorf("PUBLIC_PORT must differ from PORT (got %d)", c.PublicPort)
+	}
+	if c.CloudSyncConcurrency < 1 {
+		c.CloudSyncConcurrency = 1
 	}
 	if c.PublicUploadMB < 1 {
 		c.PublicUploadMB = 64

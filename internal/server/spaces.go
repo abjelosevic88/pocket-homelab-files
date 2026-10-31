@@ -42,6 +42,13 @@ func (s *Server) space(ctx context.Context, uid int64, id string) (*vfs.Space, e
 			return nil, err
 		}
 		return s.mountSpace(m)
+	case strings.HasPrefix(id, "cloud:"):
+		n, _ := strconv.ParseInt(strings.TrimPrefix(id, "cloud:"), 10, 64)
+		c, err := s.store.CloudFor(ctx, uid, n)
+		if err != nil {
+			return nil, err
+		}
+		return s.cloudSpace(c), nil
 	case strings.HasPrefix(id, "share:"):
 		n, _ := strconv.ParseInt(strings.TrimPrefix(id, "share:"), 10, 64)
 		sh, err := s.store.ShareFor(ctx, uid, n)
@@ -92,6 +99,7 @@ type spaceView struct {
 	Owner    string `json:"owner,omitempty"`
 	Color    string `json:"color,omitempty"`
 	ReadOnly bool   `json:"read_only,omitempty"`
+	Cloud    string `json:"cloud,omitempty"` // connected drive's kind (gdrive, dropbox, …)
 }
 
 // handleSpaces lists the places in the sidebar: home, mounts, shares.
@@ -106,6 +114,17 @@ func (s *Server) handleSpaces(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, m := range mounts {
 		out = append(out, spaceView{ID: "mount:" + strconv.FormatInt(m.ID, 10), Kind: "mount", Name: m.Name, Perm: m.Perm, IsDir: true, Color: m.Color, ReadOnly: m.ReadOnly})
+	}
+	clouds, err := s.store.CloudsFor(ctx, uid)
+	if err != nil {
+		s.fail(w, err, "clouds")
+		return
+	}
+	for _, c := range clouds {
+		if c.IntervalHours == 0 {
+			continue // one-time copies live in My files
+		}
+		out = append(out, spaceView{ID: "cloud:" + strconv.FormatInt(c.ID, 10), Kind: "cloud", Name: c.Name, Perm: "view", IsDir: true, ReadOnly: true, Cloud: c.Kind})
 	}
 	shares, err := s.store.SharesWith(ctx, uid)
 	if err != nil {
