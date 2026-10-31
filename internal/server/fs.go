@@ -37,6 +37,13 @@ type listing struct {
 	Entry    *vfs.Entry  `json:"entry"`
 	Entries  []vfs.Entry `json:"entries"`
 	Writable bool        `json:"writable"`
+	Disk     *diskUsage  `json:"disk,omitempty"`
+}
+
+// diskUsage is the server disk a mount's folder lives on.
+type diskUsage struct {
+	Free  uint64 `json:"free"`
+	Total uint64 `json:"total"`
 }
 
 func (s *Server) viewOf(ctx context.Context, uid int64, sp *vfs.Space) spaceView {
@@ -85,7 +92,14 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.annotate(ctx, me(r), sp, entries)
-	writeJSON(w, http.StatusOK, listing{Space: s.viewOf(ctx, me(r), sp), Path: rel, Entry: entry, Entries: nonNilEntries(entries), Writable: sp.Writable()})
+	out := listing{Space: s.viewOf(ctx, me(r), sp), Path: rel, Entry: entry, Entries: nonNilEntries(entries), Writable: sp.Writable()}
+	// A mount is a whole disk or folder on the server: say how full its disk is.
+	if out.Space.Kind == "mount" && entry.IsDir {
+		if free, total := diskFree(filepath.Join(sp.Root, filepath.FromSlash(rel))); total > 0 {
+			out.Disk = &diskUsage{Free: free, Total: total}
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func nonNilEntries(e []vfs.Entry) []vfs.Entry {
