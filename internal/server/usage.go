@@ -78,15 +78,12 @@ func (s *Server) homeUsage(uid int64) (files int, size int64, stale bool) {
 	return u.files, u.size, stale
 }
 
-// spaceSize leaves files and size out until the space has been counted; the disk is always known.
 type spaceSize struct {
-	Files *int   `json:"files,omitempty"`
-	Size  *int64 `json:"size,omitempty"`
-	Free  uint64 `json:"free,omitempty"`
-	Total uint64 `json:"total,omitempty"`
+	Files int   `json:"files"`
+	Size  int64 `json:"size"`
 }
 
-// handleSpaceSizes reports how much each mount and connected drive in the sidebar holds, and the disk it is on.
+// handleSpaceSizes reports how much each mount and connected drive in the sidebar holds.
 // Folders not counted yet are left out and pending is set; the sidebar asks again shortly.
 func (s *Server) handleSpaceSizes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -109,12 +106,9 @@ func (s *Server) handleSpaceSizes(w http.ResponseWriter, r *http.Request) {
 	sizes, pending := map[string]spaceSize{}, false
 	for _, sp := range spaces {
 		u, known, stale := s.dirUsage(sp, usageWriteGap, false)
-		var size spaceSize
 		if known {
-			size.Files, size.Size = &u.files, &u.size
+			sizes[sp.ID] = spaceSize{Files: u.files, Size: u.size}
 		}
-		size.Free, size.Total = diskFree(sp.Root)
-		sizes[sp.ID] = size
 		pending = pending || stale
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"sizes": sizes, "pending": pending})
