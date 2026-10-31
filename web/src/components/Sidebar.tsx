@@ -145,7 +145,12 @@ function useSpaceSizes(uid: number | undefined, version: unknown, count: number)
     let timer = 0, gone = false, tries = 0
     const load = () => api.get<{ sizes: SpaceSizes; pending: boolean }>(`${V1}/spaces/sizes`).then(r => {
       if (gone) return
-      setSizes(r.sizes); localStorage.setItem(key, JSON.stringify(r.sizes))
+      // While counting, a place the server has no total for yet keeps the last one shown.
+      setSizes(prev => {
+        const next = r.pending ? { ...prev, ...r.sizes } : r.sizes
+        localStorage.setItem(key, JSON.stringify(next))
+        return next
+      })
       // A media disk takes minutes to count: keep asking, more slowly, until it is done.
       if (r.pending) timer = window.setTimeout(load, Math.min(30000, 5000 * ++tries))
     }).catch(() => {})
