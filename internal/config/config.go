@@ -65,6 +65,7 @@ type Config struct {
 	SearchMountText bool
 
 	Rclone                string
+	RcloneICloudAuth      string // patched rclone used only for iCloud sign-in (third_party/rclone)
 	CloudSyncConcurrency  int
 	GoogleClientID        string
 	GoogleClientSecret    string
@@ -167,6 +168,7 @@ func Load() (*Config, error) {
 
 		SearchMountText:       envBool("SEARCH_MOUNT_TEXT", false),
 		Rclone:                env("RCLONE", "rclone"),
+		RcloneICloudAuth:      env("RCLONE_ICLOUD_AUTH", "/usr/local/bin/rclone-icloud-auth"),
 		CloudSyncConcurrency:  envInt("CLOUD_SYNC_CONCURRENCY", 2),
 		GoogleClientID:        env("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret:    env("GOOGLE_CLIENT_SECRET", ""),

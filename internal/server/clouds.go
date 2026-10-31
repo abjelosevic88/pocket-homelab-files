@@ -228,6 +228,18 @@ func (s *Server) saveConfig(ctx context.Context, c *store.Cloud, cfg clouds.Conf
 	return s.store.SetCloudConfig(ctx, c.ID, sealed)
 }
 
+// icloudAuthRclone is the rclone for iCloud sign-in steps: the patched build when the image has it
+// (third_party/rclone/README.md), else the normal one.
+func (s *Server) icloudAuthRclone() *clouds.Rclone {
+	rc := s.rclone()
+	if p := s.cfg.RcloneICloudAuth; p != "" {
+		if _, err := os.Stat(p); err == nil {
+			rc.Bin = p
+		}
+	}
+	return rc
+}
+
 func (s *Server) rclone() *clouds.Rclone {
 	return &clouds.Rclone{Bin: s.cfg.Rclone, Dir: filepath.Join(s.cfg.DataDir, "rclone")}
 }
@@ -743,10 +755,11 @@ func (s *Server) handleCreateCloud(w http.ResponseWriter, r *http.Request) {
 
 // icloudStep runs one round of rclone's iCloud setup: sign in, then the 2FA code.
 func (s *Server) icloudStep(ctx context.Context, c *store.Cloud, cfg clouds.Config, state, answer string) error {
-	got, q, err := s.rclone().ConfigStep(ctx, cfg, state, answer)
+	rc := s.icloudAuthRclone()
+	got, q, err := rc.ConfigStep(ctx, cfg, state, answer)
 	// Asked which phone to text: the first trusted number (most people have one).
 	for i := 0; err == nil && q != nil && q.Name == "config_2fa_phone" && len(q.Examples) > 0 && i < 2; i++ {
-		got, q, err = s.rclone().ConfigStep(ctx, got, q.State, q.Examples[0])
+		got, q, err = rc.ConfigStep(ctx, got, q.State, q.Examples[0])
 	}
 	if err != nil {
 		s.log.Warn("icloud sign-in step failed", "cloud", c.ID, "err", err)

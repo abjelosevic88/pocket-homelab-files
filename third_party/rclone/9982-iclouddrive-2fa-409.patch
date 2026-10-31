@@ -1,0 +1,403 @@
+From 8b640558bd0c86036e3ff69bd236ae1b43c1076b Mon Sep 17 00:00:00 2001
+From: jarvis2k1 <270752561+jarvis2k1@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 20:27:37 +0200
+Subject: [PATCH 1/2] iclouddrive: accept 2FA 409 when Apple reports the code
+ as valid
+
+Since around mid-2026 idmsa answers /verify/trusteddevice/securitycode
+(and /verify/phone/securitycode) with HTTP 409 even when the submitted
+code is accepted. ADP-enabled accounts get a fresh X-Apple-Session-Token
+header on that 409, which #9660 already treats as success
+(acceptedDespiteConflict). Non-ADP accounts don't get that header at all,
+so they still failed 2FA validation outright even though the response
+body carries "securityCode":{"valid":true}.
+
+Replace acceptedDespiteConflict with a pure verifyAccepted(resp, body)
+helper that accepts a 409 on either signal - the session-token header or
+the valid:true body - and rejects everything else (malformed or negative
+body, any other status). Validate2FACode and ValidateSMSCode now use
+IgnoreStatus and read the body manually instead of NoResponse, since
+NoResponse lets rest.Client's default error handler drain and close the
+body before verifyAccepted can inspect it.
+
+Fixes #9730
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ backend/iclouddrive/api/session.go      | 104 ++++++++++++++++--------
+ backend/iclouddrive/api/session_test.go |  76 +++++++++++++++++
+ 2 files changed, 148 insertions(+), 32 deletions(-)
+
+diff --git a/backend/iclouddrive/api/session.go b/backend/iclouddrive/api/session.go
+index c1df5076da3..eebf78f1a0e 100644
+--- a/backend/iclouddrive/api/session.go
++++ b/backend/iclouddrive/api/session.go
+@@ -194,20 +194,40 @@ func (s *Session) Request(ctx context.Context, opts rest.Opts, request any, resp
+ 	return resp, nil
+ }
+ 
+-// acceptedDespiteConflict returns true when Apple signals a successful code
+-// validation with HTTP 409. Since ~mid-2026, idmsa returns 409 on the
+-// securitycode endpoints even when the code is accepted (body carries
+-// securityCode.valid=true), but it still issues X-Apple-Session-Token on
+-// success. Treat token issuance as ground truth and absorb the headers so
+-// TrustSession can proceed.
+-func (s *Session) acceptedDespiteConflict(resp *http.Response) bool {
+-	if resp == nil || resp.StatusCode != 409 || resp.Header.Get("X-Apple-Session-Token") == "" {
++// securityCodeResponse is the subset of Apple's JSON body on the
++// securitycode "enter" endpoints that tells us whether a 409 actually
++// reflects an accepted code.
++type securityCodeResponse struct {
++	SecurityCode *struct {
++		Valid bool `json:"valid"`
++	} `json:"securityCode"`
++}
++
++// verifyAccepted reports whether a response from a securitycode "enter"
++// call (trusted-device or SMS) is a successful 2FA submission. idmsa can
++// answer a correct code with HTTP 409 instead of 2xx: treat that as
++// success when the response carries X-Apple-Session-Token, or when the
++// JSON body reports securityCode.valid. A malformed or negative body on a
++// 409 is a genuine rejection. Callers are responsible for absorbing
++// response headers.
++func verifyAccepted(resp *http.Response, body []byte) bool {
++	if resp == nil {
+ 		return false
+ 	}
+-	s.mu.Lock()
+-	s.extractHeaders(resp)
+-	s.mu.Unlock()
+-	return true
++	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
++		return true
++	}
++	if resp.StatusCode != http.StatusConflict {
++		return false
++	}
++	if resp.Header.Get("X-Apple-Session-Token") != "" {
++		return true
++	}
++	var parsed securityCodeResponse
++	if err := json.Unmarshal(body, &parsed); err != nil {
++		return false
++	}
++	return parsed.SecurityCode != nil && parsed.SecurityCode.Valid
+ }
+ 
+ // Requires2FA returns true if the session requires 2FA
+@@ -667,28 +687,37 @@ func (s *Session) Validate2FACode(ctx context.Context, code string) error {
+ 		return err
+ 	}
+ 
++	// IgnoreStatus and a manual body read (instead of NoResponse) let
++	// verifyAccepted inspect the JSON payload on a 409: NoResponse would let
++	// rest.Client's default error handler drain and close the body first.
+ 	opts := rest.Opts{
+ 		Method:       "POST",
+ 		Path:         "/verify/trusteddevice/securitycode",
+ 		ExtraHeaders: s.GetAuthHeaders(map[string]string{}),
+ 		RootURL:      authEndpoint,
+ 		Body:         body,
+-		NoResponse:   true,
++		IgnoreStatus: true,
+ 	}
+ 
+-	resp, err := s.Request(ctx, opts, nil, nil)
+-	if err != nil && s.acceptedDespiteConflict(resp) {
+-		err = nil
++	resp, err := s.srv.Call(ctx, &opts)
++	if err != nil {
++		return fmt.Errorf("validate2FACode failed: %w", err)
++	}
++	respBody, readErr := io.ReadAll(resp.Body)
++	_ = resp.Body.Close()
++	if readErr != nil {
++		return fmt.Errorf("validate2FACode failed: reading response body: %w", readErr)
+ 	}
+-	if err == nil {
+-		if err := s.TrustSession(ctx); err != nil {
+-			return err
+-		}
+ 
+-		return nil
++	if !verifyAccepted(resp, respBody) {
++		return fmt.Errorf("validate2FACode failed: HTTP error %d (%s) returned body: %q", resp.StatusCode, resp.Status, respBody)
+ 	}
+ 
+-	return fmt.Errorf("validate2FACode failed: %w", err)
++	s.mu.Lock()
++	s.extractHeaders(resp)
++	s.mu.Unlock()
++
++	return s.TrustSession(ctx)
+ }
+ 
+ // TrustedPhoneNumber represents a phone number that can receive SMS verification codes
+@@ -799,25 +828,36 @@ func (s *Session) ValidateSMSCode(ctx context.Context, code string, phoneID int,
+ 	if err != nil {
+ 		return err
+ 	}
++	// See the comment in Validate2FACode: IgnoreStatus + a manual body read
++	// (instead of NoResponse) is needed so verifyAccepted can inspect the
++	// JSON payload on a 409.
+ 	opts := rest.Opts{
+ 		Method:       "POST",
+ 		Path:         "/verify/phone/securitycode",
+ 		ExtraHeaders: s.GetAuthHeaders(map[string]string{}),
+ 		RootURL:      authEndpoint,
+ 		Body:         body,
+-		NoResponse:   true,
++		IgnoreStatus: true,
+ 	}
+-	resp, err := s.Request(ctx, opts, nil, nil)
+-	if err != nil && s.acceptedDespiteConflict(resp) {
+-		err = nil
++	resp, err := s.srv.Call(ctx, &opts)
++	if err != nil {
++		return fmt.Errorf("validateSMSCode: %w", err)
+ 	}
+-	if err == nil {
+-		if err := s.TrustSession(ctx); err != nil {
+-			return err
+-		}
+-		return nil
++	respBody, readErr := io.ReadAll(resp.Body)
++	_ = resp.Body.Close()
++	if readErr != nil {
++		return fmt.Errorf("validateSMSCode: reading response body: %w", readErr)
++	}
++
++	if !verifyAccepted(resp, respBody) {
++		return fmt.Errorf("validateSMSCode: HTTP error %d (%s) returned body: %q", resp.StatusCode, resp.Status, respBody)
+ 	}
+-	return fmt.Errorf("validateSMSCode: %w", err)
++
++	s.mu.Lock()
++	s.extractHeaders(resp)
++	s.mu.Unlock()
++
++	return s.TrustSession(ctx)
+ }
+ 
+ // TrustSession trusts the session
+diff --git a/backend/iclouddrive/api/session_test.go b/backend/iclouddrive/api/session_test.go
+index c3d06a37b14..69e10dc057d 100644
+--- a/backend/iclouddrive/api/session_test.go
++++ b/backend/iclouddrive/api/session_test.go
+@@ -1,6 +1,7 @@
+ package api
+ 
+ import (
++	"fmt"
+ 	"net/http"
+ 	"testing"
+ 
+@@ -38,3 +39,78 @@ func TestExtractHeadersDeletesEmptyCookies(t *testing.T) {
+ 	assert.Equal(t, "keep", s.Cookies[0].Name)
+ 	assert.Equal(t, "keep=value", s.GetCookieString())
+ }
++
++// TestVerifyAccepted covers the acceptance logic for the securitycode
++// "enter" endpoints: a 409 must be treated as success when either the
++// X-Apple-Session-Token header is present, or the JSON body reports
++// "securityCode":{"valid":true}. Anything else on a 409, and any
++// non-2xx/409 status, is a rejection.
++func TestVerifyAccepted(t *testing.T) {
++	newResp := func(status int, sessionToken string) *http.Response {
++		h := make(http.Header)
++		if sessionToken != "" {
++			h.Set("X-Apple-Session-Token", sessionToken)
++		}
++		return &http.Response{StatusCode: status, Status: fmt.Sprintf("%d", status), Header: h}
++	}
++
++	for _, test := range []struct {
++		name   string
++		resp   *http.Response
++		body   string
++		accept bool
++	}{
++		{
++			name:   "204 success no body",
++			resp:   newResp(204, ""),
++			body:   "",
++			accept: true,
++		},
++		{
++			name:   "409 with valid securityCode and no session token",
++			resp:   newResp(409, ""),
++			body:   `{"success":0,"securityCode":{"code":"123456","valid":true},"phoneNumberVerification":{}}`,
++			accept: true,
++		},
++		{
++			name:   "409 with securityCode valid=false is rejected",
++			resp:   newResp(409, ""),
++			body:   `{"success":0,"securityCode":{"code":"123456","valid":false}}`,
++			accept: false,
++		},
++		{
++			name:   "409 with empty body is rejected",
++			resp:   newResp(409, ""),
++			body:   "",
++			accept: false,
++		},
++		{
++			name:   "409 with garbage body is rejected",
++			resp:   newResp(409, ""),
++			body:   "not json",
++			accept: false,
++		},
++		{
++			name:   "409 with X-Apple-Session-Token header (ADP) accepted despite empty body",
++			resp:   newResp(409, "session-token-value"),
++			body:   "",
++			accept: true,
++		},
++		{
++			name:   "400 with valid securityCode is still rejected (only 2xx/409 count)",
++			resp:   newResp(400, ""),
++			body:   `{"securityCode":{"valid":true}}`,
++			accept: false,
++		},
++		{
++			name:   "nil response is rejected",
++			resp:   nil,
++			body:   "",
++			accept: false,
++		},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			assert.Equal(t, test.accept, verifyAccepted(test.resp, []byte(test.body)))
++		})
++	}
++}
+
+From 7c7cfd64c4d0c0cef1e415dacdff711d439dea0a Mon Sep 17 00:00:00 2001
+From: jarvis2k1 <270752561+jarvis2k1@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 20:27:37 +0200
+Subject: [PATCH 2/2] iclouddrive: send icloud.com-style headers on 2FA verify
+ and trust requests
+
+Mirrors the header change in steilerDev/icloud-photos-sync#1104: on the
+securitycode "enter" endpoints and /2sv/trust, send Origin/Referer as
+https://www.icloud.com instead of the idmsa sign-in page, and drop the
+idmsa-only headers X-Apple-I-FD-Client-Info and X-Apple-Auth-Attributes.
+
+rclone never sends icloud-photos-sync's third removed header,
+"X-Apple-Offer-Security-Upgrade"; its closest analogue,
+"X-Apple-Mandate-Security-Upgrade" (sent as "0"), is deliberately left
+alone since icloud-photos-sync doesn't touch it and the names/semantics
+don't match closely enough to justify guessing.
+
+Tested together with the previous commit, on a real non-ADP HSA2 account
+that was failing with #9730; it was not isolated which of the two commits
+was strictly necessary to fix that account. This change is also expected
+to help #9966 (trust token issued at /2sv/trust unusable on a later run),
+since icloud-photos-sync#1104 reports the same header change fixed that
+symptom for them, but that has not been independently verified here.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ backend/iclouddrive/api/session.go      | 26 +++++++++++++++++++++----
+ backend/iclouddrive/api/session_test.go | 26 +++++++++++++++++++++++++
+ 2 files changed, 48 insertions(+), 4 deletions(-)
+
+diff --git a/backend/iclouddrive/api/session.go b/backend/iclouddrive/api/session.go
+index eebf78f1a0e..e1a21b4bd0f 100644
+--- a/backend/iclouddrive/api/session.go
++++ b/backend/iclouddrive/api/session.go
+@@ -670,7 +670,7 @@ func (s *Session) RequestPushNotification(ctx context.Context) error {
+ 	opts := rest.Opts{
+ 		Method:       "PUT",
+ 		Path:         "/verify/trusteddevice/securitycode",
+-		ExtraHeaders: s.GetAuthHeaders(map[string]string{}),
++		ExtraHeaders: s.getVerifyHeaders(map[string]string{}),
+ 		RootURL:      authEndpoint,
+ 		NoResponse:   true,
+ 	}
+@@ -693,7 +693,7 @@ func (s *Session) Validate2FACode(ctx context.Context, code string) error {
+ 	opts := rest.Opts{
+ 		Method:       "POST",
+ 		Path:         "/verify/trusteddevice/securitycode",
+-		ExtraHeaders: s.GetAuthHeaders(map[string]string{}),
++		ExtraHeaders: s.getVerifyHeaders(map[string]string{}),
+ 		RootURL:      authEndpoint,
+ 		Body:         body,
+ 		IgnoreStatus: true,
+@@ -834,7 +834,7 @@ func (s *Session) ValidateSMSCode(ctx context.Context, code string, phoneID int,
+ 	opts := rest.Opts{
+ 		Method:       "POST",
+ 		Path:         "/verify/phone/securitycode",
+-		ExtraHeaders: s.GetAuthHeaders(map[string]string{}),
++		ExtraHeaders: s.getVerifyHeaders(map[string]string{}),
+ 		RootURL:      authEndpoint,
+ 		Body:         body,
+ 		IgnoreStatus: true,
+@@ -865,7 +865,7 @@ func (s *Session) TrustSession(ctx context.Context) error {
+ 	opts := rest.Opts{
+ 		Method:        "GET",
+ 		Path:          "/2sv/trust",
+-		ExtraHeaders:  s.GetAuthHeaders(map[string]string{}),
++		ExtraHeaders:  s.getVerifyHeaders(map[string]string{}),
+ 		RootURL:       authEndpoint,
+ 		NoResponse:    true,
+ 		ContentLength: new(int64(0)),
+@@ -905,6 +905,24 @@ func (s *Session) GetAuthHeaders(overwrite map[string]string) map[string]string
+ 	return headers
+ }
+ 
++// getVerifyHeaders returns headers for the 2FA "verify" calls that
++// complete authentication: requesting/submitting a securitycode on the
++// trusted-device and phone paths, and trusting the session at /2sv/trust.
++// idmsa treats these requests differently depending on whether they look
++// like they came from icloud.com's own web client rather than the idmsa
++// sign-in page: Origin and Referer point at icloud.com instead of
++// idmsa.apple.com, and the sign-in-only headers X-Apple-I-FD-Client-Info
++// and X-Apple-Auth-Attributes are dropped.
++func (s *Session) getVerifyHeaders(overwrite map[string]string) map[string]string {
++	headers := s.getSRPAuthHeaders()
++	headers["Origin"] = baseEndpoint
++	headers["Referer"] = baseEndpoint + "/"
++	delete(headers, "X-Apple-I-FD-Client-Info")
++	delete(headers, "X-Apple-Auth-Attributes")
++	maps.Copy(headers, overwrite)
++	return headers
++}
++
+ // GetHeaders returns the authentication headers required for a request
+ func (s *Session) GetHeaders(overwrite map[string]string) map[string]string {
+ 	headers := GetCommonHeaders(map[string]string{})
+diff --git a/backend/iclouddrive/api/session_test.go b/backend/iclouddrive/api/session_test.go
+index 69e10dc057d..3aaf0a1ae6b 100644
+--- a/backend/iclouddrive/api/session_test.go
++++ b/backend/iclouddrive/api/session_test.go
+@@ -114,3 +114,29 @@ func TestVerifyAccepted(t *testing.T) {
+ 		})
+ 	}
+ }
++
++// TestGetVerifyHeaders checks that the securitycode/2sv-trust header
++// overrides are applied: Origin and Referer point at icloud.com instead of
++// idmsa.apple.com, the two idmsa-sign-in-only headers are absent, and
++// auth-correlation headers (scnt, session id) are preserved.
++func TestGetVerifyHeaders(t *testing.T) {
++	s := NewSession()
++	s.ClientID = "test-client-id"
++	s.Scnt = "test-scnt"
++	s.SessionID = "test-session-id"
++	s.AuthAttributes = "test-auth-attrs"
++
++	headers := s.getVerifyHeaders(map[string]string{})
++
++	assert.Equal(t, baseEndpoint, headers["Origin"])
++	assert.Equal(t, baseEndpoint+"/", headers["Referer"])
++	assert.NotContains(t, headers, "X-Apple-I-FD-Client-Info")
++	assert.NotContains(t, headers, "X-Apple-Auth-Attributes")
++	// auth-correlation headers must survive the override
++	assert.Equal(t, "test-scnt", headers["scnt"])
++	assert.Equal(t, "test-session-id", headers["X-Apple-ID-Session-Id"])
++
++	// overwrite still wins
++	overridden := s.getVerifyHeaders(map[string]string{"Origin": "https://example.com"})
++	assert.Equal(t, "https://example.com", overridden["Origin"])
++}

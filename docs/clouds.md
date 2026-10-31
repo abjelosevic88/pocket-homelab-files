@@ -94,7 +94,11 @@ per provider can serve both apps: register both redirect URIs.
 - **Microsoft**: Azure portal → App registrations → New (accounts in any organizational directory and
   personal Microsoft accounts) → Redirect URI (Web) → Certificates & secrets → new client secret.
 
-**iCloud**: Advanced Data Protection must be off and "Access iCloud Data on the Web" on. Apple ends the
+**iCloud**: Advanced Data Protection must be off and "Access iCloud Data on the Web" on. Since mid-2026
+Apple answers a correct code with HTTP 409, which released rclone rejects for accounts without ADP, so
+the sign-in steps run `rclone-icloud-auth`: rclone v1.75.2 plus rclone#9982, built in the image from a
+pinned commit and a checksummed patch (`third_party/rclone/`, `RCLONE_ICLOUD_AUTH`). Syncs use the
+official rclone. "Text me a code instead" asks Apple for a text message. Apple ends the
 session about once a month; the drive then shows "Sign in again" (password + a new code).
 
 Sign-ins (tokens, cookies, pasted remotes) are sealed with AES-256-GCM under `DATA_DIR/secret.key`. The
