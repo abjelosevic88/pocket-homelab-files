@@ -127,7 +127,12 @@ func (s *Server) handleSpaces(w http.ResponseWriter, r *http.Request) {
 		if !ownSpace(&c) {
 			continue // the copy lives in My files or a mount
 		}
-		out = append(out, spaceView{ID: "cloud:" + strconv.FormatInt(c.ID, 10), Kind: "cloud", Name: c.Name, Perm: "view", IsDir: true, ReadOnly: true, Cloud: c.Kind})
+		// Same rule as cloudSpace: a two-way drive's place is editable, a one-way copy is not.
+		perm, readOnly := "view", true
+		if twoWay(&c) {
+			perm, readOnly = "edit", false
+		}
+		out = append(out, spaceView{ID: "cloud:" + strconv.FormatInt(c.ID, 10), Kind: "cloud", Name: c.Name, Perm: perm, IsDir: true, ReadOnly: readOnly, Cloud: c.Kind})
 	}
 	shares, err := s.store.SharesWith(ctx, uid)
 	if err != nil {

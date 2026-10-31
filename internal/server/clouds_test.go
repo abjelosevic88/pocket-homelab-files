@@ -285,6 +285,11 @@ func TestTwoWaySyncCarriesEditsBothWaysAndAsksOnConflicts(t *testing.T) {
 	if res, l := a.do("GET", "/api/v1/fs/list?space="+sp+"&path=/", nil); res.Code != 200 || l["writable"] != true {
 		t.Fatalf("not editable: %d %v", res.Code, l)
 	}
+	for _, v := range a.list("GET", "/api/v1/spaces", nil) {
+		if v["id"] == sp && (v["perm"] != "edit" || v["read_only"] == true) {
+			t.Fatalf("spaces lists the two-way drive as read-only: %v", v)
+		}
+	}
 	upload(t, a, sp, "/", "from-pocket.txt", "made here")
 	_ = os.WriteFile(filepath.Join(cloud, "from-cloud.txt"), []byte("made there"), 0o644)
 	syncNow(t, a, id, "idle")
