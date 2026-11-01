@@ -427,6 +427,12 @@ func TestWebDAVAndLinkScopes(t *testing.T) {
 	if !linkAllows([]string{"files:write"}, r) {
 		t.Fatal("files:write refused a PUT")
 	}
+	if !linkAllows([]string{"files:read"}, httptest.NewRequest("GET", "/api/v1/search?q=report", nil)) {
+		t.Fatal("files:read should allow the global search (Pocket Search)")
+	}
+	if linkAllows([]string{"files:read"}, httptest.NewRequest("POST", "/api/v1/search/rebuild", nil)) {
+		t.Fatal("files:read allowed a search rebuild")
+	}
 	if !linkAllows([]string{"files:read"}, httptest.NewRequest("PROPFIND", "/remote.php/dav/files/a/Docs", nil)) {
 		t.Fatal("files:read refused PROPFIND")
 	}

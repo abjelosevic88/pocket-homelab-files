@@ -20,7 +20,7 @@ import (
 // link token as the password (or a bearer token).
 
 var linkOffers = []core.Offer{
-	{Scope: "files:read", Name: "Open your files", Description: "List your folders and read your files, over WebDAV or the API (Pocket Office opens documents kept here)."},
+	{Scope: "files:read", Name: "Open your files", Description: "List, search and read your files, over WebDAV or the API (Pocket Office opens documents kept here, Pocket Search finds them beside the web)."},
 	{Scope: "files:write", Name: "Save your files", Description: "Upload, change, move and delete files in your folders (Pocket Office saves documents back, Pocket Documents files your archive)."},
 }
 
@@ -41,7 +41,8 @@ var linkRoutes = []linkRoute{
 	{"GET", regexp.MustCompile(`^/api/v1/auth/me$`), ""},
 	{"GET HEAD OPTIONS PROPFIND", regexp.MustCompile(davPath), "files:read"},
 	{"PUT DELETE MKCOL MOVE COPY PROPPATCH LOCK UNLOCK", regexp.MustCompile(davPath), "files:write"},
-	{"GET", regexp.MustCompile(`^/api/v1/(spaces|stars|fs/(list|stat|raw|zip|search|thumb|usage))$`), "files:read"},
+	// search = the global names-and-contents search (Pocket Search shows your files beside the web)
+	{"GET", regexp.MustCompile(`^/api/v1/(spaces|stars|search|fs/(list|stat|raw|zip|search|thumb|usage))$`), "files:read"},
 	{"PUT", regexp.MustCompile(`^/api/v1/fs/upload$`), "files:write"},
 	{"POST", regexp.MustCompile(`^/api/v1/fs/(mkdir|move|copy|rename|delete|text)$`), "files:write"},
 }
