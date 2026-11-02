@@ -316,3 +316,15 @@ button.badge { border: 0; cursor: pointer; }
 @media (max-width: 640px) {
   .cloud-actions { flex-basis: 100%; justify-content: flex-start; margin-left: 46px; }
 }
+
+/* Downloads: one open of a link per card */
+.visit { display: flex; align-items: flex-start; gap: 12px; padding: 11px 12px 11px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.visit > .grow { display: grid; gap: 3px; }
+.visit-ico { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: var(--surface-3); color: var(--text-2); }
+.visit-flag { font-size: 19px; line-height: 1; }
+.visit-head { gap: 6px; }
+.visit-head .link-btn { max-width: 100%; color: var(--text); }
+.visit-files { margin: 2px 0 0; padding-left: 16px; }
+.visit-raw summary { cursor: pointer; width: max-content; }
+.visit-raw .mono { overflow-wrap: anywhere; }
+.downloads-filter { min-width: 220px; max-width: 100%; }

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"time"
 )
@@ -144,7 +145,7 @@ func (s *Store) DeleteSend(ctx context.Context, id string) error {
 
 // TakeTicket counts one download and returns a ticket that unlocks the
 // files for ttl. It refuses when the send is used up or expired.
-func (s *Store) TakeTicket(ctx context.Context, id, ip, agent string, ttl time.Duration) (string, *Send, error) {
+func (s *Store) TakeTicket(ctx context.Context, id string, v VisitIn, ttl time.Duration) (string, *Send, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return "", nil, err
@@ -161,11 +162,14 @@ func (s *Store) TakeTicket(ctx context.Context, id, ip, agent string, ttl time.D
 	if _, err := tx.ExecContext(ctx, `UPDATE sends SET downloads = downloads + 1, last_download_at = ? WHERE id = ?`, now, id); err != nil {
 		return "", nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO send_log (send_id, at, ip, agent) VALUES (?, ?, ?, ?)`, id, now, ip, truncate(agent, 300)); err != nil {
+	res, err := tx.ExecContext(ctx, `INSERT INTO send_log (send_id, at, ip, agent, country, region, city, lang, tz, referer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		id, now, v.IP, truncate(v.Agent, 300), truncate(v.Country, 8), truncate(v.Region, 80), truncate(v.City, 80), truncate(v.Lang, 35), truncate(v.TZ, 60), truncate(v.Referer, 300))
+	if err != nil {
 		return "", nil, err
 	}
+	logID, _ := res.LastInsertId()
 	tok := RandomToken(24)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO send_tickets (token_hash, send_id, expires_at) VALUES (?, ?, ?)`, HashToken(tok), id, time.Now().Add(ttl).UTC().Format(time.RFC3339)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO send_tickets (token_hash, send_id, expires_at, log_id) VALUES (?, ?, ?, ?)`, HashToken(tok), id, time.Now().Add(ttl).UTC().Format(time.RFC3339), logID); err != nil {
 		return "", nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -174,6 +178,41 @@ func (s *Store) TakeTicket(ctx context.Context, id, ip, agent string, ttl time.D
 	sd.Downloads++
 	sd.LastDownloadAt = now
 	return tok, sd, nil
+}
+
+// RecordFetch notes on the open behind a ticket that a file was served:
+// its name (once) and the bytes sent.
+func (s *Store) RecordFetch(ctx context.Context, sendID, tok, name string, n int64) {
+	if tok == "" {
+		return
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return
+	}
+	defer tx.Rollback() //nolint:errcheck
+	var logID int64
+	var raw string
+	if tx.QueryRowContext(ctx, `SELECT l.id, l.files FROM send_tickets t JOIN send_log l ON l.id = t.log_id WHERE t.token_hash = ? AND t.send_id = ?`, HashToken(tok), sendID).Scan(&logID, &raw) != nil {
+		return
+	}
+	var files []string
+	_ = json.Unmarshal([]byte(raw), &files)
+	seen := false
+	for _, f := range files {
+		if f == name {
+			seen = true
+			break
+		}
+	}
+	if !seen && name != "" && len(files) < 100 {
+		files = append(files, truncate(name, 200))
+	}
+	b, _ := json.Marshal(files)
+	if _, err := tx.ExecContext(ctx, `UPDATE send_log SET files = ?, bytes = bytes + ?, last_at = ? WHERE id = ?`, string(b), n, Now(), logID); err != nil {
+		return
+	}
+	_ = tx.Commit()
 }
 
 // TicketValid reports whether a ticket unlocks this send right now.
@@ -186,21 +225,55 @@ func (s *Store) TicketValid(ctx context.Context, id, tok string) bool {
 	return n > 0
 }
 
-// SendLog lists the counted downloads of a send.
-func (s *Store) SendLog(ctx context.Context, id string) []SendVisit {
-	rows, err := s.DB.QueryContext(ctx, `SELECT at, ip, agent FROM send_log WHERE send_id = ? ORDER BY id DESC LIMIT 100`, id)
-	if err != nil {
-		return nil
-	}
+const visitCols = `l.id, l.send_id, l.at, l.ip, l.agent, l.country, l.region, l.city, l.lang, l.tz, l.referer, l.files, l.bytes, l.last_at,
+	(SELECT COUNT(1) FROM send_log p WHERE p.send_id = l.send_id AND p.id <= l.id), s.label, s.kind`
+
+func scanVisits(rows *sql.Rows) []SendVisit {
 	defer rows.Close()
 	out := []SendVisit{}
 	for rows.Next() {
 		var v SendVisit
-		if rows.Scan(&v.At, &v.IP, &v.Agent) == nil {
+		var files string
+		if rows.Scan(&v.ID, &v.SendID, &v.At, &v.IP, &v.Agent, &v.Country, &v.Region, &v.City, &v.Lang, &v.TZ, &v.Referer, &files, &v.Bytes, &v.LastAt, &v.Nth, &v.Label, &v.Kind) == nil {
+			_ = json.Unmarshal([]byte(files), &v.Files)
+			if v.Files == nil {
+				v.Files = []string{}
+			}
 			out = append(out, v)
 		}
 	}
 	return out
+}
+
+// SendLog lists the counted downloads of a send.
+func (s *Store) SendLog(ctx context.Context, id string) []SendVisit {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+visitCols+` FROM send_log l JOIN sends s ON s.id = l.send_id WHERE l.send_id = ? ORDER BY l.id DESC LIMIT 100`, id)
+	if err != nil {
+		return nil
+	}
+	return scanVisits(rows)
+}
+
+// Visits lists the downloads of all of a person's links, newest first;
+// before (a visit id, 0 = from the newest) pages back.
+func (s *Store) Visits(ctx context.Context, uid int64, sendID string, before int64, limit int) ([]SendVisit, error) {
+	q := `SELECT ` + visitCols + ` FROM send_log l JOIN sends s ON s.id = l.send_id WHERE s.owner_id = ?`
+	args := []any{uid}
+	if sendID != "" {
+		q += ` AND l.send_id = ?`
+		args = append(args, sendID)
+	}
+	if before > 0 {
+		q += ` AND l.id < ?`
+		args = append(args, before)
+	}
+	q += ` ORDER BY l.id DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.DB.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanVisits(rows), nil
 }
 
 // SendAvailable reports whether a send can still be downloaded.

@@ -3,7 +3,9 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { ago, bytes, plural, stamp } from '../lib/format'
 import { createSend, emailSend, forgetLink, knownLink, type Item, type SendOptions } from '../lib/sends'
+import { Link } from 'react-router-dom'
 import { EmailLink } from '../components/EmailLink'
+import { VisitRow } from '../components/Visits'
 import type { NoteFormat } from '../lib/crypto'
 import type { Send } from '../lib/types'
 import { filesFromDrop, filesFromInput } from '../lib/uploads'
@@ -161,8 +163,8 @@ function LinkDetails({ id, onClose }: { id: string; onClose: () => void }) {
           <button type="button" className="btn sm danger-text" onClick={() => patch({ expires: 'now' })}>Expire now</button>
         </div>
         <p className="small muted">Limit: {downloadsLabel(data.max_downloads)}.</p>
-        <h4>Downloads</h4>
-        {data.log?.length ? <table className="table compact"><tbody>{data.log.map((l, i) => <tr key={i}><td>{stamp(l.at)}</td><td className="mono small">{l.ip}</td><td className="small muted ellipsis" style={{ maxWidth: 200 }} title={l.agent}>{l.agent}</td></tr>)}</tbody></table> : <p className="muted small">Not downloaded yet.</p>}
+        <div className="row"><h4 className="grow">Downloads</h4>{data.log?.length ? <Link className="btn sm" to={`/downloads?link=${data.id}`} onClick={onClose}>All details</Link> : null}</div>
+        {data.log?.length ? <div className="link-list">{data.log.slice(0, 5).map(v => <VisitRow key={v.id} v={v} />)}</div> : <p className="muted small">Not downloaded yet.</p>}
       </div>
     </Modal>
   )

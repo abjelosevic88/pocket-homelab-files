@@ -39,6 +39,7 @@ export function Sidebar({ onNew, onNavigate }: { onNew: (k: NewKind) => void; on
     { to: '/starred', label: 'Starred', icon: 'star' },
     { to: '/shared', label: 'Shared', icon: 'users', count: shared.length },
     { to: '/send', label: 'Links', icon: 'link' },
+    { to: '/downloads', label: 'Downloads', icon: 'download' },
     { to: '/requests', label: 'Upload links', icon: 'inbox' },
     { to: '/trash', label: 'Trash', icon: 'trash' },
   ]

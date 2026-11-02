@@ -45,6 +45,7 @@ Places are *spaces*: `home` (your files), `mount:<id>`, `share:<id>`. Paths insi
 | Call | What |
 | :--- | :--- |
 | `GET /sends` · `GET /sends/{id}` | Yours, with `url`, `available`, `reason`; one with its download `log` |
+| `GET /sends/visits?link=&before=` | Who opened your links, newest first (100 a page; `before` = last `id`): time, IP, Cloudflare country/region/city, language, time zone, referrer, user agent read as `browser`/`os`/`device`/`model`/`app`, the `files` taken and `bytes` sent, `nth` download |
 | `POST /sends` | `{kind: files\|note\|live, encrypted, label, expires: 5m\|1h\|1d\|7d\|30d\|never, max_downloads, notify, password}`; files/note: `files:[{expected, name, type}]` (+ `meta`, `auth_hash`, `password_salt` when encrypted); live: `live:{space, paths[]}` |
 | `PUT /sends/{id}/files/{idx}?offset=` | Append a piece (a retried piece truncates back to its offset) |
 | `POST /sends/{id}/finish` | Ready when every file has its announced size |
@@ -53,7 +54,7 @@ Places are *spaces*: `home` (your files), `mount:<id>`, `share:<id>`. Paths insi
 | `POST /sends/{id}/email` `{to: ["a@x, b@y"], message, link}` | Email it from your mail account; encrypted links need `link` (the whole link with its key, used once, never stored) |
 
 Public (no sign-in; also on `PUBLIC_PORT`): `GET /public/sends/{id}`, `POST /public/sends/{id}/open`
-`{auth}` or `{password}` → `{ticket, …}`, `GET /public/sends/{id}/files/{idx}?t=`, live links
+`{auth}` or `{password}` (+ optional `tz`, `ref` for the owner's download log) → `{ticket, …}`, `GET /public/sends/{id}/files/{idx}?t=`, live links
 `GET /public/sends/{id}/live/list|file|zip?t=&path=`.
 
 ## Upload links (requests)

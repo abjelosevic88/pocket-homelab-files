@@ -300,6 +300,19 @@ func TestEncryptedSendFlow(t *testing.T) {
 	if w, _ := anon.do("GET", "/api/v1/public/sends/"+id+"/files/0?t="+ticket, nil); w.Code != 200 {
 		t.Fatalf("ticket died with the limit: %d", w.Code)
 	}
+	// the owner sees the open, the file it took and the bytes sent
+	w, _ = alice.do("GET", "/api/v1/sends/visits?link="+id, nil)
+	var visits []store.SendVisit
+	if err := json.Unmarshal(w.Body.Bytes(), &visits); err != nil || len(visits) != 1 {
+		t.Fatalf("visits: %d %s", w.Code, w.Body.String())
+	}
+	if v := visits[0]; v.Bytes != 20 || len(v.Files) != 1 || v.Files[0] != "file 1 of 1" || v.Nth != 1 || v.SendID != id {
+		t.Fatalf("visit details: %+v", v)
+	}
+	bob := newPerson(t, s, h, "bob@example.com", "user")
+	if w, _ := bob.do("GET", "/api/v1/sends/visits?link="+id, nil); w.Body.String() != "[]\n" {
+		t.Fatalf("bob sees alice's downloads: %s", w.Body.String())
+	}
 }
 
 func TestLivePasswordSendAndPublicRouter(t *testing.T) {

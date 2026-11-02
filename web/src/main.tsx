@@ -14,6 +14,7 @@ import Browser from './pages/Browser'
 import Shared from './pages/Shared'
 import Starred from './pages/Starred'
 import SendPage from './pages/Send'
+import Downloads from './pages/Downloads'
 import Requests from './pages/Requests'
 import Trash from './pages/Trash'
 import Settings from './pages/Settings'
@@ -45,6 +46,7 @@ function App() {
             <Route path="/shared" element={<Shared />} />
             <Route path="/starred" element={<Starred />} />
             <Route path="/send" element={<SendPage />} />
+            <Route path="/downloads" element={<Downloads />} />
             <Route path="/requests" element={<Requests />} />
             <Route path="/trash" element={<Trash />} />
             <Route path="*" element={<Navigate to="/f/home" replace />} />
