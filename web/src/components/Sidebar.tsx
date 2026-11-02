@@ -148,7 +148,12 @@ function useSpaceSizes(uid: number | undefined, version: unknown, count: number)
       if (gone) return
       // While counting, a place the server has no total for yet keeps the last one shown.
       setSizes(prev => {
-        const next = r.pending ? { ...prev, ...r.sizes } : r.sizes
+        // A drive whose account size is still being asked keeps the last capacity shown too.
+        const next = r.pending ? { ...prev, ...r.sizes } : { ...r.sizes }
+        for (const [id, sz] of Object.entries(next)) {
+          const was = prev?.[id]
+          if (!sz.total && was?.total) next[id] = { ...sz, total: was.total, free: was.free }
+        }
         localStorage.setItem(key, JSON.stringify(next))
         return next
       })
