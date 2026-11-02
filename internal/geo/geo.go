@@ -37,6 +37,7 @@ type DB struct {
 	log       *slog.Logger
 	mu        sync.RWMutex
 	city, asn *maxminddb.Reader
+	priv      privacy
 }
 
 var files = map[string]string{"city": "dbip-city-lite", "asn": "dbip-asn-lite"}
@@ -45,6 +46,7 @@ var files = map[string]string{"city": "dbip-city-lite", "asn": "dbip-asn-lite"}
 func Open(dir string, log *slog.Logger) *DB {
 	g := &DB{dir: dir, log: log}
 	g.load()
+	g.loadLists()
 	return g
 }
 
@@ -76,6 +78,9 @@ func (g *DB) Run(ctx context.Context) {
 				g.load()
 				g.log.Info("ip location database updated")
 			}
+		}
+		if err := g.updateLists(ctx); err != nil {
+			g.log.Warn("vpn / tor / private relay lists not all updated", "err", err)
 		}
 		select {
 		case <-ctx.Done():

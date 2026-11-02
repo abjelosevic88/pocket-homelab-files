@@ -45,7 +45,7 @@ Places are *spaces*: `home` (your files), `mount:<id>`, `share:<id>`. Paths insi
 | Call | What |
 | :--- | :--- |
 | `GET /sends` · `GET /sends/{id}` | Yours, with `url`, `available`, `reason`; one with its download `log` |
-| `GET /sends/visits?link=&before=` | Who opened your links, newest first (100 a page; `before` = last `id`): time, IP, Cloudflare country/region/city, language, time zone, referrer, user agent read as `browser`/`os`/`device`/`model`/`app`, the `files` taken and `bytes` sent, `nth` download |
+| `GET /sends/visits?link=&before=` | Who opened your links, newest first (100 a page; `before` = last `id`): time, IP, place (Cloudflare + DB-IP), `network`, language, time zone, referrer, user agent read as `browser`/`os`/`device`/`model`/`app`, the `files` taken and `bytes` sent, `nth` download, `hidden` (tor \| relay \| vpn \| likely_vpn) with `hidden_why` |
 | `POST /sends` | `{kind: files\|note\|live, encrypted, label, expires: 5m\|1h\|1d\|7d\|30d\|never, max_downloads, notify, password}`; files/note: `files:[{expected, name, type}]` (+ `meta`, `auth_hash`, `password_salt` when encrypted); live: `live:{space, paths[]}` |
 | `PUT /sends/{id}/files/{idx}?offset=` | Append a piece (a retried piece truncates back to its offset) |
 | `POST /sends/{id}/finish` | Ready when every file has its announced size |
