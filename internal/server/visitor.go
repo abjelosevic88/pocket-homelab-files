@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -45,6 +46,30 @@ var (
 		{"Gmail", "GSA/"}, {"Snapchat", "Snapchat"}, {"TikTok", "musical_ly"}, {"TikTok", "BytedanceWebview"}, {"Slack", "Slack"}, {"Discord", "Discord"},
 	}
 )
+
+// describeVisit fills in device and place: Cloudflare's country wins when
+// it was recorded, the offline database adds the rest (and places old opens).
+func (s *Server) describeVisit(v *store.SendVisit) {
+	describeAgent(v)
+	p := s.geo.Lookup(v.IP)
+	if v.Country == "" {
+		v.Country, v.Region, v.City = p.Country, p.Region, p.City
+	} else if v.City == "" && p.Country == v.Country {
+		v.Region, v.City = p.Region, p.City
+	}
+	if p.Country == v.Country {
+		v.Lat, v.Lon = p.Lat, p.Lon
+	}
+	v.Network, v.ASN = p.Network, p.ASN
+}
+
+func (s *Server) describeVisits(ctx context.Context, uid int64, list []store.SendVisit) {
+	seen := s.store.VisitsPerIP(ctx, uid)
+	for i := range list {
+		s.describeVisit(&list[i])
+		list[i].Seen = seen[list[i].IP]
+	}
+}
 
 // describeAgent reads browser, system, device and in-app browser from a user agent.
 func describeAgent(v *store.SendVisit) {
@@ -110,7 +135,6 @@ func truncateRunes(s string, n int) string {
 // visitSummary is the one line about a visitor that goes into the alert:
 // "Android 14 phone (SM-A528B) · Facebook app · 🇧🇦 Bosnia and Herzegovina, Sarajevo · 188.129.80.66".
 func visitSummary(v store.SendVisit) string {
-	describeAgent(&v)
 	var parts []string
 	dev := strings.TrimSpace(v.OS + " " + v.Device)
 	if v.Model != "" && v.Model != "iPhone" && v.Model != "iPad" {
@@ -130,6 +154,9 @@ func visitSummary(v store.SendVisit) string {
 		parts = append(parts, where)
 	} else if v.TZ != "" {
 		parts = append(parts, "time zone "+v.TZ)
+	}
+	if v.Network != "" {
+		parts = append(parts, v.Network)
 	}
 	if v.IP != "" {
 		parts = append(parts, v.IP)

@@ -5,6 +5,7 @@ go 1.26.5
 require (
 	github.com/abjelosevic88/pocket-homelab-core v0.18.5
 	github.com/go-chi/chi/v5 v5.5.0
+	github.com/oschwald/maxminddb-golang/v2 v2.9.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0
 	golang.org/x/net v0.61.0

@@ -318,13 +318,41 @@ button.badge { border: 0; cursor: pointer; }
 }
 
 /* Downloads: one open of a link per card */
-.visit { display: flex; align-items: flex-start; gap: 12px; padding: 11px 12px 11px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
-.visit > .grow { display: grid; gap: 3px; }
-.visit-ico { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; background: var(--surface-3); color: var(--text-2); }
-.visit-flag { font-size: 19px; line-height: 1; }
-.visit-head { gap: 6px; }
-.visit-head .link-btn { max-width: 100%; color: var(--text); }
-.visit-files { margin: 2px 0 0; padding-left: 16px; }
+.visit { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.visit-flag { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px; background: var(--surface-2); font-size: 28px; line-height: 1; box-shadow: inset 0 0 0 1px var(--border); }
+.visit-flag.none { color: var(--muted); }
+.visit-body { flex: 1; min-width: 0; display: grid; gap: 7px; }
+.visit-head { display: flex; align-items: baseline; gap: 10px; }
+.visit-where { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visit-when { flex: none; font-size: 12.5px; color: var(--muted); }
+.visit-sub { margin-top: -4px; }
+.visit-sub .link-btn { color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; font-weight: 550; }
+.visit-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.visit-chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12.5px; color: var(--text-2); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.visit-chip .icon { flex: none; opacity: .75; }
+.visit-took { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: 9px; background: var(--surface-2); }
+.visit-took > .icon { color: var(--accent); flex: none; }
+.visit-took .muted .icon { vertical-align: -2px; }
+.visit-files { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; }
+.visit-file { font-size: 12.5px; font-weight: 550; padding: 2px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-ink); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visit-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; }
+.visit-foot .link-btn { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.visit-raw { flex-basis: 100%; }
 .visit-raw summary { cursor: pointer; width: max-content; }
-.visit-raw .mono { overflow-wrap: anywhere; }
+.visit-raw .kv { margin-top: 6px; }
+.visit-raw .mono { font-size: 12px; font-weight: 400; }
+.nowrap { white-space: nowrap; }
+.visit-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 18px; }
+.visit-stat { display: grid; gap: 2px; padding: 10px 14px; min-width: 96px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.visit-stat b { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.visit-stat span { font-size: 12px; color: var(--muted); }
+.visit-stat-flags { display: flex; gap: 10px; }
+.visit-stat-flags small { font-size: 12px; color: var(--muted); margin-left: 3px; font-weight: 550; }
+.visit-day + .visit-day { margin-top: 18px; }
+.visit-day-title { font-size: 12px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px 2px; }
 .downloads-filter { min-width: 220px; max-width: 100%; }
+@media (max-width: 767px) {
+  .visit { padding: 12px; gap: 11px; }
+  .visit-flag { width: 38px; height: 38px; font-size: 23px; border-radius: 10px; }
+  .visit-stat { flex: 1 1 calc(50% - 8px); }
+}

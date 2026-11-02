@@ -24,6 +24,7 @@ import (
 
 	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"github.com/abjelosevic88/pocket-homelab-files/internal/config"
+	"github.com/abjelosevic88/pocket-homelab-files/internal/geo"
 	"github.com/abjelosevic88/pocket-homelab-files/internal/search"
 	"github.com/abjelosevic88/pocket-homelab-files/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-files/internal/vfs"
@@ -64,6 +65,7 @@ type Server struct {
 	sealErr  error
 
 	clouds *cloudRunner
+	geo    *geo.DB
 	usage  usageCache
 	quota  quotaCache
 	search *search.Index
@@ -79,6 +81,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 	s.pending = newNotifyQueue(s)
 	s.clouds = newCloudRunner(s)
 	s.office = &officeCache{m: map[int64]officeEntry{}}
+	s.geo = geo.Open(filepath.Join(cfg.DataDir, "geo"), log)
 	return s
 }
 
@@ -124,6 +127,9 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 	go s.housekeeping(ctx)
 	go s.pending.run(ctx)
 	go s.clouds.loop(ctx)
+	if s.cfg.GeoIP {
+		go s.geo.Run(ctx)
+	}
 	if err := s.openSearch(ctx); err != nil {
 		s.log.Warn("search index unavailable; searching walks folders instead", "err", err)
 	}

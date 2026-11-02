@@ -123,6 +123,12 @@ type SendVisit struct {
 	Device  string `json:"device,omitempty"` // phone | tablet | computer
 	Model   string `json:"model,omitempty"`  // e.g. SM-A528B, iPhone
 	App     string `json:"app,omitempty"`    // in-app browser: Facebook, Instagram, …
+	// From the offline IP database when served.
+	Network string  `json:"network,omitempty"` // the visitor's provider
+	ASN     uint    `json:"asn,omitempty"`
+	Lat     float64 `json:"lat,omitempty"`
+	Lon     float64 `json:"lon,omitempty"`
+	Seen    int     `json:"seen,omitempty"` // opens of the owner's links from this address
 }
 
 // VisitIn is what the server learns about a visitor when they open a link.

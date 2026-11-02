@@ -22,6 +22,7 @@ import (
 
 func testServer(t *testing.T) (*Server, http.Handler) {
 	t.Helper()
+	t.Setenv("GEOIP", "false")
 	dir := t.TempDir()
 	mounts := filepath.Join(dir, "server")
 	_ = os.MkdirAll(filepath.Join(mounts, "media", "movies"), 0o755)
