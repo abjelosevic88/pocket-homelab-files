@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/abjelosevic88/pocket-homelab-files/internal/geo"
 	"github.com/abjelosevic88/pocket-homelab-files/internal/store"
 )
 
@@ -61,7 +63,55 @@ func (s *Server) describeVisit(v *store.SendVisit) {
 		v.Lat, v.Lon = p.Lat, p.Lon
 	}
 	v.Network, v.ASN = p.Network, p.ASN
+	s.hiddenVisit(v)
 }
+
+// hiddenVisit tells a VPN, Tor or Apple's Private Relay from a plain
+// connection: public address lists, a server host instead of a home or
+// mobile provider, and a browser clock that does not fit the address.
+// None of it is proof; a VPN over a home connection in the visitor's own
+// time zone looks like anyone else.
+func (s *Server) hiddenVisit(v *store.SendVisit) {
+	h := s.geo.Hidden(v.IP)
+	switch {
+	case h.Tor:
+		v.Hidden, v.HiddenWhy = "tor", []string{"Tor exit node: the real address and place are hidden"}
+		return
+	case h.Relay:
+		v.Hidden, v.HiddenWhy = "relay", []string{"iCloud Private Relay (Apple): the real address is hidden, the area is roughly right"}
+		return
+	}
+	hosting := h.Datacenter || geo.HostingNetwork(v.Network)
+	clock, mine, theirs := geo.CompareClock(v.TZ, v.Country, time.Now())
+	var why []string
+	if h.VPN {
+		why = append(why, "address is on a public VPN list")
+	}
+	if hosting {
+		what := "a server host"
+		if v.Network != "" {
+			what = v.Network
+		}
+		why = append(why, "network is "+what+", not a home or mobile provider")
+	}
+	switch {
+	case clock == geo.ClockOther:
+		why = append(why, fmt.Sprintf("browser clock is %s (%s), the address is in %s (%s)", v.TZ, mine, countryName(v.Country), theirs))
+	case clock == geo.ClockSameOffset && (h.VPN || hosting):
+		why = append(why, fmt.Sprintf("browser time zone %s, address in %s", v.TZ, countryName(v.Country)))
+	}
+	switch {
+	case h.VPN || (hosting && clock != geo.ClockSame):
+		v.Hidden = "vpn"
+	case hosting || clock == geo.ClockOther:
+		v.Hidden = "likely_vpn"
+	}
+	if v.Hidden != "" {
+		v.HiddenWhy = why
+	}
+}
+
+var hiddenLabel = map[string]string{"tor": "Tor", "relay": "iCloud Private Relay", "vpn": "VPN", "likely_vpn": "likely VPN"}
 
 func (s *Server) describeVisits(ctx context.Context, uid int64, list []store.SendVisit) {
 	seen := s.store.VisitsPerIP(ctx, uid)
@@ -160,6 +210,9 @@ func visitSummary(v store.SendVisit) string {
 	}
 	if v.IP != "" {
 		parts = append(parts, v.IP)
+	}
+	if l := hiddenLabel[v.Hidden]; l != "" {
+		parts = append(parts, "⚠️ "+l)
 	}
 	return strings.Join(parts, " · ")
 }
