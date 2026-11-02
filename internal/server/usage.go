@@ -182,6 +182,9 @@ func (s *Server) handleSpaceSizes(w http.ResponseWriter, r *http.Request) {
 // A cloud's size limit changes slowly and asking costs a call to the cloud, so it is kept an hour.
 const quotaMaxAge = time.Hour
 
+// quotaRetry is how soon a cloud that did not answer is asked again.
+const quotaRetry = 2 * time.Minute
+
 type accountQuota struct {
 	total, free int64 // zero when the cloud does not say
 	at          time.Time
@@ -199,7 +202,12 @@ func (s *Server) cloudQuota(c *store.Cloud) (accountQuota, bool) {
 	qc.mu.Lock()
 	defer qc.mu.Unlock()
 	q, known := qc.byID[c.ID]
-	if (!known || time.Since(q.at) > quotaMaxAge) && !qc.asking[c.ID] {
+	// A failed ask is tried again soon: an hour without the bar is too long for a passing error.
+	maxAge := quotaMaxAge
+	if q.total == 0 {
+		maxAge = quotaRetry
+	}
+	if (!known || time.Since(q.at) > maxAge) && !qc.asking[c.ID] {
 		if qc.asking == nil {
 			qc.byID, qc.asking = map[int64]accountQuota{}, map[int64]bool{}
 		}
@@ -217,10 +225,17 @@ func (s *Server) cloudQuota(c *store.Cloud) (accountQuota, bool) {
 						got.free = max(0, *a.Total-*a.Used)
 					}
 				} else if err != nil {
-					s.log.Debug("cloud quota", "cloud", cloud.ID, "err", err)
+					s.log.Warn("cloud quota", "cloud", cloud.ID, "err", err)
 				}
+			} else {
+				s.log.Warn("cloud quota", "cloud", cloud.ID, "err", err)
 			}
 			qc.mu.Lock()
+			// A failed ask keeps the last size known rather than wiping it.
+			if got.total == 0 && q.total > 0 {
+				got.total, got.free = q.total, q.free
+				got.at = time.Now().Add(quotaRetry - quotaMaxAge)
+			}
 			qc.byID[cloud.ID] = got
 			delete(qc.asking, cloud.ID)
 			qc.mu.Unlock()
