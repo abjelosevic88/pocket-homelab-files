@@ -15,13 +15,20 @@ export interface Access { user_id: number; name?: string; email?: string; perm: 
 export interface Share { id: number; owner_id: number; owner_name: string; owner_email: string; path: string; is_dir: boolean; everyone_perm: '' | Perm; note: string; created_at: string; members?: Access[]; perm?: Perm; space?: string; name?: string }
 export interface Mount { id: number; name: string; path: string; read_only: boolean; everyone_perm: '' | Perm; color: string; created_by: number; created_at: string; access?: Access[]; missing?: boolean; allowed?: boolean; error?: string }
 
+/** One open of a link: who, from where, and what they took. */
+export interface SendVisit {
+  id: number; send_id: string; at: string; ip: string; agent: string
+  country?: string; region?: string; city?: string; lang?: string; tz?: string; referer?: string
+  files: string[]; bytes: number; last_at?: string; nth: number; label?: string; kind?: Send['kind']
+  browser?: string; os?: string; device?: 'phone' | 'tablet' | 'computer'; model?: string; app?: string
+}
 export interface SendFile { idx: number; size: number; expected: number; name?: string; type?: string }
 export interface Send {
   id: string; owner_id: number; kind: 'files' | 'note' | 'live'; encrypted: boolean; label: string
   live_space?: string; live_paths?: string[]; file_count: number; total_size: number
   has_password: boolean; expires_at: string; max_downloads: number; downloads: number; notify: boolean
   status: 'uploading' | 'ready'; last_download_at: string; created_at: string
-  files?: SendFile[]; log?: { at: string; ip: string; agent: string }[]
+  files?: SendFile[]; log?: SendVisit[]
   url: string; available: boolean; reason?: string
 }
 export interface PublicSend {

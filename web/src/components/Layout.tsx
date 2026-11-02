@@ -123,6 +123,7 @@ export default function Layout() {
     { id: 'starred', label: 'Starred', icon: 'star', hint: 'S', run: () => navigate('/starred') },
     { id: 'shared', label: 'Shared', icon: 'users', hint: 'P', keywords: 'people', run: () => navigate('/shared') },
     { id: 'links', label: 'Links', icon: 'link', hint: 'L', keywords: 'sends', run: () => navigate('/send') },
+    { id: 'downloads', label: 'Downloads of my links', icon: 'download', keywords: 'opened visits who ip', run: () => navigate('/downloads') },
     { id: 'requests', label: 'Upload links', icon: 'inbox', hint: 'I', keywords: 'requests', run: () => navigate('/requests') },
     { id: 'trash', label: 'Trash', icon: 'trash', hint: 'T', keywords: 'deleted restore', run: () => navigate('/trash') },
     { id: 'settings', label: 'Settings', icon: 'settings', hint: ',', run: () => navigate('/settings') },
@@ -160,7 +161,7 @@ export default function Layout() {
   )
 }
 
-const SECTION: Record<string, string> = { starred: 'Starred', shared: 'Shared', send: 'Links', requests: 'Upload links', trash: 'Trash' }
+const SECTION: Record<string, string> = { starred: 'Starred', shared: 'Shared', send: 'Links', downloads: 'Downloads', requests: 'Upload links', trash: 'Trash' }
 
 function TopBar({ onMenu, onPalette, mobile, compact, sidebarOpen }: { onMenu: () => void; onPalette: () => void; mobile: boolean; compact: boolean; sidebarOpen: boolean }) {
   const { user, themeMode, setThemeMode, status, setUser } = useApp()

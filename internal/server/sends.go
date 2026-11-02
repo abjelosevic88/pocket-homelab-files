@@ -115,7 +115,24 @@ func (s *Server) handleGetSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sd.Log = s.store.SendLog(r.Context(), sd.ID)
+	for i := range sd.Log {
+		describeAgent(&sd.Log[i])
+	}
 	writeJSON(w, http.StatusOK, s.sendView(sd))
+}
+
+// handleVisits lists who opened the person's links (?link= narrows to one).
+func (s *Server) handleVisits(w http.ResponseWriter, r *http.Request) {
+	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
+	list, err := s.store.Visits(r.Context(), me(r), r.URL.Query().Get("link"), before, 100)
+	if err != nil {
+		s.fail(w, err, "downloads")
+		return
+	}
+	for i := range list {
+		describeAgent(&list[i])
+	}
+	writeJSON(w, http.StatusOK, list)
 }
 
 type sendIn struct {
@@ -513,6 +530,8 @@ func (s *Server) handleOpenSend(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Auth     string `json:"auth"`
 		Password string `json:"password"`
+		TZ       string `json:"tz"`
+		Ref      string `json:"ref"`
 	}
 	_ = decode(r, &in)
 	if sd.Encrypted {
@@ -530,7 +549,8 @@ func (s *Server) handleOpenSend(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "wrong password")
 		return
 	}
-	tok, sd, err := s.store.TakeTicket(ctx, id, clientIP(r), r.UserAgent(), ticketTTL)
+	visit := visitIn(r, in.TZ, in.Ref)
+	tok, sd, err := s.store.TakeTicket(ctx, id, visit, ticketTTL)
 	if err != nil {
 		s.fail(w, err, "open")
 		return
@@ -544,7 +564,7 @@ func (s *Server) handleOpenSend(w http.ResponseWriter, r *http.Request) {
 		s.fillPlain(ctx, sd, &p)
 	}
 	p.Ticket, p.Available = tok, true
-	s.sendOpened(ctx, sd, r)
+	s.sendOpened(ctx, sd, visit)
 	writeJSON(w, http.StatusOK, p)
 }
 
@@ -565,20 +585,60 @@ func tokenMatches(tok, wantHex string) bool {
 	return d == 0
 }
 
-func (s *Server) sendOpened(ctx context.Context, sd *store.Send, r *http.Request) {
-	left := "no limit"
-	if sd.MaxDownloads > 0 {
-		left = fmt.Sprintf("%d of %d", sd.Downloads, sd.MaxDownloads)
+func (s *Server) sendOpened(ctx context.Context, sd *store.Send, v store.VisitIn) {
+	s.publish(ctx, "files.send_downloaded", "send:"+sd.ID, sd.OwnerID, map[string]any{"id": sd.ID, "label": sd.Label, "downloads": sd.Downloads, "max_downloads": sd.MaxDownloads, "country": v.Country})
+	if !sd.Notify {
+		return
 	}
-	s.publish(ctx, "files.send_downloaded", "send:"+sd.ID, sd.OwnerID, map[string]any{"id": sd.ID, "label": sd.Label, "downloads": sd.Downloads, "max_downloads": sd.MaxDownloads})
-	if sd.Notify {
-		label := sd.Label
-		if label == "" {
-			label = "your link"
-		} else {
-			label = "“" + label + "”"
+	what, title := "“"+sd.Label+"”", "Link opened"
+	if strings.Trim(sd.Label, " -_.·") == "" {
+		what = "your link"
+	}
+	switch sd.Kind {
+	case "note":
+		what, title = "Note "+strings.TrimPrefix(what, "your link"), "Note opened"
+		what = strings.TrimSpace(what)
+	case "live":
+		what += " (live link)"
+	}
+	nth := ordinal(sd.Downloads) + " time"
+	if sd.MaxDownloads > 0 {
+		nth = fmt.Sprintf("%d of %d downloads", sd.Downloads, sd.MaxDownloads)
+	}
+	body := fmt.Sprintf("%s — %s.", what, nth)
+	if who := visitSummary(store.SendVisit{IP: v.IP, Agent: v.Agent, Country: v.Country, City: v.City, TZ: v.TZ}); who != "" {
+		body += " " + who
+	}
+	s.pending.add(sd.OwnerID, "sends", "send:"+sd.ID, title, body, s.cfg.BaseURL+"/downloads?link="+sd.ID)
+}
+
+// countingWriter counts the bytes a download really sent.
+type countingWriter struct {
+	http.ResponseWriter
+	n int64
+}
+
+func (c *countingWriter) Write(b []byte) (int, error) {
+	n, err := c.ResponseWriter.Write(b)
+	c.n += int64(n)
+	return n, err
+}
+
+func (c *countingWriter) Flush() {
+	if f, ok := c.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// fetched wraps w so the open behind the request's ticket learns which
+// file it took and how much of it; call done after serving.
+func (s *Server) fetched(w http.ResponseWriter, r *http.Request, sd *store.Send) (*countingWriter, func(name string)) {
+	cw := &countingWriter{ResponseWriter: w}
+	return cw, func(name string) {
+		if cw.n == 0 && r.Method == http.MethodHead {
+			return
 		}
-		s.pending.add(sd.OwnerID, "sends", "send:"+sd.ID, "Link downloaded", fmt.Sprintf("Someone opened %s (%s).", label, left), s.cfg.BaseURL+"/send")
+		s.store.RecordFetch(context.WithoutCancel(r.Context()), sd.ID, r.URL.Query().Get("t"), name, cw.n)
 	}
 }
 
@@ -614,6 +674,16 @@ func (s *Server) handleSendFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 	fi, _ := f.Stat()
+	name := pathBase(sd.Files[idx].Name)
+	switch {
+	case sd.Kind == "note":
+		name = "the note"
+	case name == "":
+		name = fmt.Sprintf("file %d of %d", idx+1, len(sd.Files)) // encrypted: the server never sees names
+	}
+	cw, done := s.fetched(w, r, sd)
+	defer done(name)
+	w = cw
 	if sd.Encrypted {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.Header().Set("Cache-Control", "no-store")
@@ -700,7 +770,9 @@ func (s *Server) handleLiveFile(w http.ResponseWriter, r *http.Request) {
 	if sp.File != "" {
 		name = sp.File
 	}
-	serveFile(w, r, f, fi, name, !queryBool(r, "inline"))
+	cw, done := s.fetched(w, r, sd)
+	defer done(strings.TrimPrefix(vfs.Clean(p), "/"))
+	serveFile(cw, r, f, fi, name, !queryBool(r, "inline"))
 }
 
 func (s *Server) handleLiveZip(w http.ResponseWriter, r *http.Request) {
@@ -726,5 +798,7 @@ func (s *Server) handleLiveZip(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", contentDisposition("attachment", name+".zip"))
-	writeZip(r.Context(), w, sp, paths, false)
+	cw, done := s.fetched(w, r, sd)
+	defer done(name + ".zip")
+	writeZip(r.Context(), cw, sp, paths, false)
 }
