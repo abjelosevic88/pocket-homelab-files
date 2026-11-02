@@ -276,6 +276,7 @@ func (s *Server) Router() http.Handler {
 				r.Get("/mounts/browse", s.handleBrowseServer)
 
 				r.Get("/sends", s.handleListSends)
+				r.Get("/sends/visits", s.handleVisits)
 				r.Post("/sends", s.handleCreateSend)
 				r.Get("/sends/{id}", s.handleGetSend)
 				r.Put("/sends/{id}", s.handleUpdateSend)

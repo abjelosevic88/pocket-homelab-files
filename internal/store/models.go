@@ -97,11 +97,37 @@ type SendFile struct {
 	Type     string `json:"type,omitempty"`
 }
 
-// SendVisit is one counted download.
+// SendVisit is one counted download: who opened the link and what they took.
 type SendVisit struct {
-	At    string `json:"at"`
-	IP    string `json:"ip"`
-	Agent string `json:"agent"`
+	ID      int64    `json:"id"`
+	SendID  string   `json:"send_id"`
+	At      string   `json:"at"`
+	IP      string   `json:"ip"`
+	Agent   string   `json:"agent"`
+	Country string   `json:"country,omitempty"`
+	Region  string   `json:"region,omitempty"`
+	City    string   `json:"city,omitempty"`
+	Lang    string   `json:"lang,omitempty"`
+	TZ      string   `json:"tz,omitempty"`
+	Referer string   `json:"referer,omitempty"`
+	Files   []string `json:"files"`
+	Bytes   int64    `json:"bytes"`
+	LastAt  string   `json:"last_at,omitempty"`
+	Nth     int      `json:"nth"` // which download of the link this was (1 = first)
+	// Filled for the all-links list.
+	Label string `json:"label,omitempty"`
+	Kind  string `json:"kind,omitempty"`
+	// Read from Agent when served.
+	Browser string `json:"browser,omitempty"`
+	OS      string `json:"os,omitempty"`
+	Device  string `json:"device,omitempty"` // phone | tablet | computer
+	Model   string `json:"model,omitempty"`  // e.g. SM-A528B, iPhone
+	App     string `json:"app,omitempty"`    // in-app browser: Facebook, Instagram, …
+}
+
+// VisitIn is what the server learns about a visitor when they open a link.
+type VisitIn struct {
+	IP, Agent, Country, Region, City, Lang, TZ, Referer string
 }
 
 // Request is an upload link into one of the owner's folders.

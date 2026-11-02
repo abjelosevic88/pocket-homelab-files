@@ -91,16 +91,23 @@ export async function publicSend(id: string): Promise<PublicSend> {
 
 export interface Opened { send: PublicSend; meta: Meta | null; keys: Awaited<ReturnType<typeof deriveKeys>> | null }
 
+/** What the visitor's browser can tell the owner: time zone and the page the link was clicked on. */
+function visitor() {
+  let tz = ''
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch { /* old browser */ }
+  return { tz, ref: document.referrer }
+}
+
 /** Derives the keys from the link (and password), checks the metadata, then counts a download. */
 export async function openSend(ps: PublicSend, fragment: string, password: string): Promise<Opened> {
   if (!ps.encrypted) {
-    const send = await api.post<PublicSend>(`${PUB}/sends/${ps.id}/open`, { password })
+    const send = await api.post<PublicSend>(`${PUB}/sends/${ps.id}/open`, { password, ...visitor() })
     return { send, meta: null, keys: null }
   }
   if (!fragment) throw new Error('this link is missing its key (the part after #)')
   const keys = await deriveKeys(unb64url(fragment), ps.has_password ? password : undefined, ps.password_salt ? unb64url(ps.password_salt) : undefined)
   const meta = await openMeta(keys.meta, ps.meta || '')
-  const send = await api.post<PublicSend>(`${PUB}/sends/${ps.id}/open`, { auth: keys.auth })
+  const send = await api.post<PublicSend>(`${PUB}/sends/${ps.id}/open`, { auth: keys.auth, ...visitor() })
   return { send, meta, keys }
 }
 
