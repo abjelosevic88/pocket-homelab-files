@@ -254,6 +254,24 @@ func (s *Store) SendLog(ctx context.Context, id string) []SendVisit {
 	return scanVisits(rows)
 }
 
+// VisitsPerIP counts the opens of a person's links per address.
+func (s *Store) VisitsPerIP(ctx context.Context, uid int64) map[string]int {
+	out := map[string]int{}
+	rows, err := s.DB.QueryContext(ctx, `SELECT l.ip, COUNT(1) FROM send_log l JOIN sends s ON s.id = l.send_id WHERE s.owner_id = ? GROUP BY l.ip`, uid)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ip string
+		var n int
+		if rows.Scan(&ip, &n) == nil {
+			out[ip] = n
+		}
+	}
+	return out
+}
+
 // Visits lists the downloads of all of a person's links, newest first;
 // before (a visit id, 0 = from the newest) pages back.
 func (s *Store) Visits(ctx context.Context, uid int64, sendID string, before int64, limit int) ([]SendVisit, error) {

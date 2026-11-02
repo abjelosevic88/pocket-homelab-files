@@ -85,6 +85,7 @@ type Config struct {
 	PublicUploadMB int64 // chunk size limit on the public listener (Cloudflare caps a request at 100 MB)
 
 	DemoData bool
+	GeoIP    bool // place link visitors with DB-IP's free offline database (fetched monthly)
 }
 
 func env(key, def string) string {
@@ -192,6 +193,7 @@ func Load() (*Config, error) {
 		PublicUploadMB: int64(envInt("PUBLIC_CHUNK_MB", 64)),
 
 		DemoData: envBool("DEMO_DATA", false),
+		GeoIP:    envBool("GEOIP", true),
 	}
 	if c.CoreAppURL == "" {
 		c.CoreAppURL = c.BaseURL

@@ -115,9 +115,7 @@ func (s *Server) handleGetSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sd.Log = s.store.SendLog(r.Context(), sd.ID)
-	for i := range sd.Log {
-		describeAgent(&sd.Log[i])
-	}
+	s.describeVisits(r.Context(), sd.OwnerID, sd.Log)
 	writeJSON(w, http.StatusOK, s.sendView(sd))
 }
 
@@ -129,9 +127,7 @@ func (s *Server) handleVisits(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "downloads")
 		return
 	}
-	for i := range list {
-		describeAgent(&list[i])
-	}
+	s.describeVisits(r.Context(), me(r), list)
 	writeJSON(w, http.StatusOK, list)
 }
 
@@ -606,7 +602,9 @@ func (s *Server) sendOpened(ctx context.Context, sd *store.Send, v store.VisitIn
 		nth = fmt.Sprintf("%d of %d downloads", sd.Downloads, sd.MaxDownloads)
 	}
 	body := fmt.Sprintf("%s — %s.", what, nth)
-	if who := visitSummary(store.SendVisit{IP: v.IP, Agent: v.Agent, Country: v.Country, City: v.City, TZ: v.TZ}); who != "" {
+	sv := store.SendVisit{IP: v.IP, Agent: v.Agent, Country: v.Country, Region: v.Region, City: v.City, TZ: v.TZ}
+	s.describeVisit(&sv)
+	if who := visitSummary(sv); who != "" {
 		body += " " + who
 	}
 	s.pending.add(sd.OwnerID, "sends", "send:"+sd.ID, title, body, s.cfg.BaseURL+"/downloads?link="+sd.ID)
