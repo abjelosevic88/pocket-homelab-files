@@ -129,6 +129,9 @@ type SendVisit struct {
 	Lat     float64 `json:"lat,omitempty"`
 	Lon     float64 `json:"lon,omitempty"`
 	Seen    int     `json:"seen,omitempty"` // opens of the owner's links from this address
+	// Whether the address hides the visitor: tor | relay | vpn | likely_vpn, and why.
+	Hidden    string   `json:"hidden,omitempty"`
+	HiddenWhy []string `json:"hidden_why,omitempty"`
 }
 
 // VisitIn is what the server learns about a visitor when they open a link.

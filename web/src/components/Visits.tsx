@@ -24,7 +24,9 @@ export function placeOf(v: SendVisit): string {
 }
 
 /** Shortens "\"Telekomunikacije Republike Srpske\" akcionarsko drustvo Banja Luka". */
-export const networkOf = (n?: string) => (n || '').replace(/"/g, '').replace(/\s+(d\.o\.o\.|akcionarsko drustvo|a\.d\.|LLC|Inc\.?|Ltd\.?|GmbH|S\.A\.|AG)\b.*$/i, '').trim()
+export const networkOf = (n?: string) => (n || '').replace(/"/g, '').replace(/\s+(d\.o\.o\.|akcionarsko drustvo|a\.d\.|LLC|Inc\.?|Ltd\.?|GmbH|S\.A\.|AG)\b.*$/i, '').replace(/[,\s]+$/, '').trim()
+
+export const hiddenLabel: Record<string, string> = { tor: 'Tor', relay: 'Private Relay', vpn: 'VPN', likely_vpn: 'Likely VPN' }
 
 const hostOf = (u: string) => { try { return new URL(u).host.replace(/^www\./, '') } catch { return u } }
 const deviceIcon: Record<string, IconName> = { phone: 'phone', tablet: 'tablet', computer: 'monitor' }
@@ -44,6 +46,7 @@ export function VisitRow({ v, showLink, onLink }: { v: SendVisit; showLink?: boo
     <article className="visit">
       <div className={`visit-flag ${v.country ? '' : 'none'}`} title={v.country ? countryName(v.country) : 'Place unknown'}>
         {v.country ? flagOf(v.country) : <Icon name="globe" size={20} />}
+        {v.hidden && <span className={`visit-flag-mask ${v.hidden}`} title={hiddenLabel[v.hidden]}><Icon name="shield" size={11} stroke={2.4} /></span>}
       </div>
       <div className="visit-body">
         <header className="visit-head">
@@ -51,6 +54,7 @@ export function VisitRow({ v, showLink, onLink }: { v: SendVisit; showLink?: boo
             <b>{place || (v.country ? countryName(v.country) : 'Somewhere unknown')}</b>
             {place && v.country && <span className="muted"> · {countryName(v.country)}</span>}
           </div>
+          {v.hidden && <span className={`visit-hidden ${v.hidden}`} title={(v.hidden_why || []).join('\n')}><Icon name="shield" size={12} /> {hiddenLabel[v.hidden]}</span>}
           <span className="visit-when" title={stamp(v.at)}>{ago(v.at)}</span>
         </header>
         <div className="visit-sub small muted">
@@ -66,6 +70,11 @@ export function VisitRow({ v, showLink, onLink }: { v: SendVisit; showLink?: boo
           {v.tz && <Chip icon="clock" title="Time zone the visitor's browser reports">{v.tz.replace(/_/g, ' ')}</Chip>}
           {v.lang && <Chip title="Browser language">{v.lang}</Chip>}
         </div>
+        {v.hidden && v.hidden_why?.length ? <div className={`visit-why ${v.hidden}`}>
+          <Icon name="shield" size={14} />
+          <div><b>{v.hidden === 'vpn' ? 'Behind a VPN' : v.hidden === 'likely_vpn' ? 'Probably behind a VPN' : v.hidden === 'tor' ? 'Using Tor' : 'Using iCloud Private Relay'}</b>{v.hidden === 'tor' || v.hidden === 'relay' ? '' : ', so the place above is the VPN server, not the person'}
+            <ul>{v.hidden_why.map(w => <li key={w}>{w}</li>)}</ul></div>
+        </div> : null}
         <div className="visit-took">
           {v.files.length ? <>
             <Icon name={note ? 'note' : 'download'} size={14} />

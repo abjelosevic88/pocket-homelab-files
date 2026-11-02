@@ -42,6 +42,7 @@ export default function Downloads() {
     return {
       ips: new Set(list.map(v => v.ip)).size,
       took: list.filter(v => v.files.length).length,
+      hidden: list.filter(v => v.hidden === 'vpn' || v.hidden === 'likely_vpn' || v.hidden === 'tor').length,
       countries: [...cc.entries()].sort((a, b) => b[1] - a[1]),
       sent: list.reduce((s, v) => s + v.bytes, 0),
     }
@@ -71,6 +72,7 @@ export default function Downloads() {
         <div className="visit-stat"><b>{stats.ips}</b><span>{stats.ips === 1 ? 'address' : 'addresses'}</span></div>
         <div className="visit-stat"><b>{stats.took}</b><span>took files</span></div>
         <div className="visit-stat"><b>{bytes(stats.sent)}</b><span>sent</span></div>
+        <div className={`visit-stat ${stats.hidden ? 'warn' : ''}`} title="Opens through a VPN or Tor (likely or certain)"><b>{stats.hidden}</b><span>VPN / Tor</span></div>
         {stats.countries.length > 0 && <div className="visit-stat wide"><b className="visit-stat-flags">{stats.countries.slice(0, 8).map(([c, n]) => <span key={c} title={`${countryName(c)}: ${plural(n, 'open')}`}>{flagOf(c)}<small>{n}</small></span>)}</b><span>{plural(stats.countries.length, 'country', 'countries')}</span></div>}
       </div>}
       {!list ? <Loading /> : !list.length ? <Empty title="No downloads yet" icon={<Icon name="download" size={26} />}>When someone opens one of your links it shows up here with their device, place and the files they took.</Empty>
@@ -79,7 +81,7 @@ export default function Downloads() {
           <div className="link-list">{d.items.map(v => <VisitRow key={v.id} v={v} showLink={!link} onLink={setLink} />)}</div>
         </section>)}
       {more && list && <div className="form-actions"><button type="button" className="btn" onClick={() => load(list[list.length - 1].id)}>Show older</button></div>}
-      <p className="small muted mt">Places are approximate: the area an address is registered to, from <a href="https://db-ip.com" target="_blank" rel="noreferrer">IP geolocation by DB-IP</a> and Cloudflare. Device, time zone and language are what the visitor's browser says — hints, not proof.</p>
+      <p className="small muted mt">Places are approximate: the area an address is registered to, from <a href="https://db-ip.com" target="_blank" rel="noreferrer">IP geolocation by DB-IP</a> and Cloudflare. Device, time zone and language are what the visitor's browser says — hints, not proof. VPN and Tor come from public address lists (Tor Project, Apple, X4BNet), server-host networks and a browser clock that doesn't fit the address; a VPN through a home connection in the visitor's own time zone can't be told apart.</p>
     </div>
   )
 }
