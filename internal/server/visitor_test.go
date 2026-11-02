@@ -16,7 +16,9 @@ func TestDescribeAgent(t *testing.T) {
 		{"curl/8.5.0", "curl/8.5.0 · 🇧🇦 Bosnia and Herzegovina, Banja Luka · 1.2.3.4"},
 	}
 	for _, c := range cases {
-		got := visitSummary(store.SendVisit{Agent: c.ua, IP: "1.2.3.4", Country: "BA", City: "Banja Luka"})
+		v := store.SendVisit{Agent: c.ua, IP: "1.2.3.4", Country: "BA", City: "Banja Luka"}
+		describeAgent(&v)
+		got := visitSummary(v)
 		if got != c.want {
 			t.Errorf("%s\n got %q\nwant %q", c.ua, got, c.want)
 		}

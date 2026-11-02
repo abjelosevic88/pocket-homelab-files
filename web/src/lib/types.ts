@@ -21,6 +21,7 @@ export interface SendVisit {
   country?: string; region?: string; city?: string; lang?: string; tz?: string; referer?: string
   files: string[]; bytes: number; last_at?: string; nth: number; label?: string; kind?: Send['kind']
   browser?: string; os?: string; device?: 'phone' | 'tablet' | 'computer'; model?: string; app?: string
+  network?: string; asn?: number; lat?: number; lon?: number; seen?: number
 }
 export interface SendFile { idx: number; size: number; expected: number; name?: string; type?: string }
 export interface Send {

@@ -3,6 +3,12 @@ import { useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { bytes, plural } from '../lib/format'
+
+const dayOf = (t: string) => {
+  const d = new Date(t), now = new Date()
+  const diff = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000)
+  return diff === 0 ? 'Today' : diff === 1 ? 'Yesterday' : d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' })
+}
 import type { Send, SendVisit } from '../lib/types'
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
@@ -31,15 +37,26 @@ export default function Downloads() {
 
   const stats = useMemo(() => {
     if (!list?.length) return null
-    const ips = new Set(list.map(v => v.ip)).size
     const cc = new Map<string, number>()
     list.forEach(v => v.country && cc.set(v.country, (cc.get(v.country) || 0) + 1))
-    const top = [...cc.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4)
-    return { ips, top, sent: list.reduce((s, v) => s + v.bytes, 0) }
+    return {
+      ips: new Set(list.map(v => v.ip)).size,
+      took: list.filter(v => v.files.length).length,
+      countries: [...cc.entries()].sort((a, b) => b[1] - a[1]),
+      sent: list.reduce((s, v) => s + v.bytes, 0),
+    }
+  }, [list])
+  const days = useMemo(() => {
+    const out: { day: string; items: SendVisit[] }[] = []
+    list?.forEach(v => {
+      const day = dayOf(v.at)
+      if (out[out.length - 1]?.day !== day) out.push({ day, items: [] })
+      out[out.length - 1].items.push(v)
+    })
+    return out
   }, [list])
 
   const setLink = (id: string) => setParams(id ? { link: id } : {})
-  const current = links.data?.find(s => s.id === link)
 
   return (
     <div className="page">
@@ -47,16 +64,22 @@ export default function Downloads() {
       <div className="row wrap mb-s">
         <Select value={link} searchable className="downloads-filter" label="Link" onChange={setLink}
           options={[{ value: '', label: 'All links' }, ...(links.data || []).filter(s => s.downloads > 0 || s.id === link).map(s => ({ value: s.id, label: s.label || (s.kind === 'note' ? 'Note' : 'Link'), hint: String(s.downloads) }))]} />
-        {link && <button type="button" className="btn sm" onClick={() => setLink('')}><Icon name="x" size={13} /> {current?.label || 'This link'}</button>}
+        {link && <button type="button" className="btn sm" onClick={() => setLink('')}><Icon name="x" size={13} /> Show all links</button>}
       </div>
-      {stats && list && <div className="small muted mb-s">
-        {plural(list.length, 'open')}{more ? '+' : ''} · {plural(stats.ips, 'IP address', 'IP addresses')} · {bytes(stats.sent)} sent
-        {stats.top.length > 0 && <> · {stats.top.map(([c, n]) => `${flagOf(c)} ${countryName(c)} ${n}`).join(', ')}</>}
+      {stats && list && <div className="visit-stats">
+        <div className="visit-stat"><b>{list.length}{more ? '+' : ''}</b><span>{list.length === 1 ? 'open' : 'opens'}</span></div>
+        <div className="visit-stat"><b>{stats.ips}</b><span>{stats.ips === 1 ? 'address' : 'addresses'}</span></div>
+        <div className="visit-stat"><b>{stats.took}</b><span>took files</span></div>
+        <div className="visit-stat"><b>{bytes(stats.sent)}</b><span>sent</span></div>
+        {stats.countries.length > 0 && <div className="visit-stat wide"><b className="visit-stat-flags">{stats.countries.slice(0, 8).map(([c, n]) => <span key={c} title={`${countryName(c)}: ${plural(n, 'open')}`}>{flagOf(c)}<small>{n}</small></span>)}</b><span>{plural(stats.countries.length, 'country', 'countries')}</span></div>}
       </div>}
       {!list ? <Loading /> : !list.length ? <Empty title="No downloads yet" icon={<Icon name="download" size={26} />}>When someone opens one of your links it shows up here with their device, place and the files they took.</Empty>
-        : <div className="link-list">{list.map(v => <VisitRow key={v.id} v={v} showLink={!link} onLink={setLink} />)}</div>}
+        : days.map(d => <section key={d.day} className="visit-day">
+          <h4 className="visit-day-title">{d.day}</h4>
+          <div className="link-list">{d.items.map(v => <VisitRow key={v.id} v={v} showLink={!link} onLink={setLink} />)}</div>
+        </section>)}
       {more && list && <div className="form-actions"><button type="button" className="btn" onClick={() => load(list[list.length - 1].id)}>Show older</button></div>}
-      <p className="small muted mt">Place comes from Cloudflare (country always; city only with its visitor location headers). Device and time zone are what the visitor's browser says, so treat them as hints.</p>
+      <p className="small muted mt">Places are approximate: the area an address is registered to, from <a href="https://db-ip.com" target="_blank" rel="noreferrer">IP geolocation by DB-IP</a> and Cloudflare. Device, time zone and language are what the visitor's browser says — hints, not proof.</p>
     </div>
   )
 }
