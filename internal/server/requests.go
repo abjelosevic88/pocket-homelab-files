@@ -40,6 +40,9 @@ func (s *Server) publicRoutes(r chi.Router) {
 	r.Post("/requests/{id}/uploads", s.handleStartRequestUpload)
 	r.Put("/requests/{id}/uploads/{uid}", s.handleRequestChunk)
 	r.Post("/requests/{id}/uploads/{uid}/finish", s.handleFinishRequestUpload)
+
+	// one-time upload links: the token is the permission (upload_links.go)
+	r.Put("/upload-links/{token}", s.handleUploadLinkPut)
 }
 
 type requestView struct {
