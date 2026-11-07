@@ -462,3 +462,52 @@ func jsonNum(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+func TestUploadLink(t *testing.T) {
+	s, h := testServer(t)
+	alice := newPerson(t, s, h, "alice@example.com", "user")
+
+	w, link := alice.do("POST", "/api/v1/fs/upload-link", map[string]any{"space": "home", "path": "Releases/App-1.0.dmg"})
+	if w.Code != 200 {
+		t.Fatalf("link: %d %s", w.Code, w.Body.String())
+	}
+	u, _ := link["url"].(string)
+	if !strings.HasPrefix(u, "https://files.example/api/v1/public/upload-links/") || link["method"] != "PUT" {
+		t.Fatalf("link: %v", link)
+	}
+	put := strings.TrimPrefix(u, "https://files.example")
+	body := bytes.Repeat([]byte{0, 1, 2, 255}, 4096) // binary, 16 KiB
+
+	anon := &client{t: t, h: h}
+	w, e := anon.do("PUT", put, body)
+	if w.Code != 200 || e["name"] != "App-1.0.dmg" || e["size"].(float64) != float64(len(body)) {
+		t.Fatalf("put: %d %s", w.Code, w.Body.String())
+	}
+	raw, _ := alice.do("GET", "/api/v1/fs/raw?"+url.Values{"space": {"home"}, "path": {"Releases/App-1.0.dmg"}}.Encode(), nil)
+	if raw.Code != 200 || !bytes.Equal(raw.Body.Bytes(), body) {
+		t.Fatalf("stored bytes differ: %d", raw.Code)
+	}
+
+	// once only
+	if w, _ := anon.do("PUT", put, "again"); w.Code != 404 {
+		t.Fatalf("second use: %d", w.Code)
+	}
+	// a made-up token
+	if w, _ := anon.do("PUT", "/api/v1/public/upload-links/"+strings.Repeat("ab", 32), "x"); w.Code != 404 {
+		t.Fatalf("unknown token: %d", w.Code)
+	}
+	// no link without signing in, and not for a bad name
+	if w, _ := anon.do("POST", "/api/v1/fs/upload-link", map[string]any{"space": "home", "path": "a.dmg"}); w.Code != 401 {
+		t.Fatalf("anonymous link: %d", w.Code)
+	}
+	// a path can't climb out of the space: it's cleaned to one inside it
+	if _, l := alice.do("POST", "/api/v1/fs/upload-link", map[string]any{"space": "home", "path": "../../x"}); l["path"] != "/x" {
+		t.Fatalf("path not kept inside the space: %v", l)
+	}
+	// same name again: kept side by side unless overwrite is asked for
+	_, link2 := alice.do("POST", "/api/v1/fs/upload-link", map[string]any{"space": "home", "path": "Releases/App-1.0.dmg"})
+	_, e2 := anon.do("PUT", strings.TrimPrefix(link2["url"].(string), "https://files.example"), "second")
+	if e2["name"] == "App-1.0.dmg" {
+		t.Fatalf("existing file was replaced without overwrite: %v", e2)
+	}
+}

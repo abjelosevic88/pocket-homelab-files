@@ -56,6 +56,8 @@ type Server struct {
 	limiter *limiter
 	davLock *davLocks
 	pending *notifyQueue
+	// one-time upload links (upload_links.go)
+	uploadLinks uploadLinks
 
 	secretOnce sync.Once
 	secretKey  []byte
@@ -261,6 +263,7 @@ func (s *Server) Router() http.Handler {
 				r.Get("/fs/usage", s.handleUsage)
 				r.Get("/fs/thumb", s.handleThumb)
 				r.Post("/fs/text", s.handleSaveText)
+				r.Post("/fs/upload-link", s.handleCreateUploadLink)
 				r.Get("/stars", s.handleStars)
 				r.Put("/stars", s.handleSetStar)
 
