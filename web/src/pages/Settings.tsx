@@ -371,7 +371,7 @@ interface MountView extends Mount { missing?: boolean; allowed?: boolean; error?
 
 function Mounts() {
   const { bump } = useApp()
-  const { data, reload } = useAsync(() => api.get<{ mounts: MountView[]; roots: string[] }>(`${V1}/mounts`), [])
+  const { data, reload } = useAsync(() => api.get<{ mounts: MountView[] | null; roots: string[] | null }>(`${V1}/mounts`).then(d => ({ mounts: d.mounts ?? [], roots: d.roots ?? [] })), [])
   const [edit, setEdit] = useState<Partial<Mount> | null>(null)
   const [del, setDel] = useState<Mount | null>(null)
   if (!data) return <Loading />

@@ -162,7 +162,11 @@ func (s *Server) handleListMounts(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, v)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"mounts": out, "roots": s.cfg.MountRoots})
+	roots := s.cfg.MountRoots
+	if roots == nil {
+		roots = []string{} // JSON [] not null: the page reads roots.length
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mounts": out, "roots": roots})
 }
 
 func (s *Server) handleSaveMount(w http.ResponseWriter, r *http.Request) {
