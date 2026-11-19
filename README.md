@@ -57,6 +57,7 @@ All screenshots use the built-in demo data. [How to refresh them](docs/screensho
   stars, list and grid views with image thumbnails, sorting, a filter and a deep search.
 - Preview images, video, audio, PDFs and text in the page; edit text files in place.
 - Download a file, or any selection or folder as a zip streamed on the fly.
+- Pocket Move can copy your files out and bring files in.
 
 **Mounts — folders that already live on the server**
 - Admins pick a folder below `MOUNT_ROOTS` (your media disk, a NAS mount) and give it a name.

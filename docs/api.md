@@ -16,6 +16,9 @@ Places are *spaces*: `home` (your files), `mount:<id>`, `share:<id>`. Paths insi
 | `GET /fs/stat?space=&path=` | One entry |
 | `GET /fs/raw?space=&path=&dl=1` | The file (ranges; `dl=1` as attachment) |
 | `GET /fs/zip?space=&path=…&path=…&name=` | Zip of files and folders, streamed |
+| `GET /export.zip` | All of My files as one zip, streamed (Pocket Move; not mounts or shares) |
+| `POST /import` | Multipart `file` = a zip, unpacked into `Moved in YYYY-MM-DD` in My files; files already there with the same content are skipped (Pocket Move) |
+| `GET /pocket/portable` | What Pocket Move may copy out and bring in |
 | `GET /fs/thumb?space=&path=&size=` | JPEG thumbnail of a JPEG/PNG/GIF/WebP |
 | `PUT /fs/upload?space=&path=<folder>&name=<name or sub/path>&conflict=rename\|overwrite\|skip\|fail&mtime=<ms>` | Body = the file |
 | `POST /fs/mkdir` `{space, path}` | New folder (parents too) |

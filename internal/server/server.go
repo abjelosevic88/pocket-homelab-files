@@ -317,6 +317,7 @@ func (s *Server) Router() http.Handler {
 				r.Delete("/tokens/{id}", s.handleDeleteToken)
 
 				r.Get("/backup", s.handleBackup)
+				r.Get(strings.TrimPrefix(core.PortablePath, "/api/v1"), portable.Handler())
 
 				r.Get("/clouds/providers", s.handleCloudProviders)
 				r.Get("/clouds/apps", s.handleCloudApps)
@@ -339,6 +340,9 @@ func (s *Server) Router() http.Handler {
 			r.Get("/fs/raw", s.handleRaw)
 			r.Get("/fs/zip", s.handleZip)
 			r.Put("/fs/upload", s.handleUpload)
+			// Pocket Move (move.go): the person's own files out and in.
+			r.Get("/export.zip", s.handleExportZip)
+			r.Post("/import", s.handleImportZip)
 			r.Put("/sends/{id}/files/{idx}", s.handleSendChunk)
 		})
 	})
@@ -498,6 +502,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Publishes: []string{"files.uploaded", "files.deleted", "files.shared", "files.send_created", "files.send_downloaded", "files.request_received"},
 		Offers:    linkOffers,
 		Uses:      linkUses,
+		Portable:  portable,
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.cfg.BaseURL + "/api/v1/auth/oidc/callback"}}
