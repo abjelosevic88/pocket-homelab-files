@@ -92,6 +92,10 @@ All screenshots use the built-in demo data. [How to refresh them](docs/screensho
 - With Pocket Core, other Pocket apps keep their files here instead of in Nextcloud: Pocket Office
   opens and saves documents, Pocket Documents files its archive, through the `files:read` and
   `files:write` links each person can switch off. [WebDAV and apps](docs/webdav.md).
+- Pocket Search finds your files beside everything else you keep on the box (`!files`), and Pocket
+  Hub shows the files you changed last: Files tells Pocket Core it can do both, so neither app
+  needs to be told about it. Each is its own link (`pocket:search`, `pocket:widget`) that you can
+  switch off, and each only ever sees the places you can open.
 
 **Two doors**
 - The app on `PORT` (keep it private: LAN, VPN, Tailscale). With `PUBLIC_PORT` set, a second

@@ -318,6 +318,9 @@ func (s *Server) Router() http.Handler {
 
 				r.Get("/backup", s.handleBackup)
 				r.Get(strings.TrimPrefix(core.PortablePath, "/api/v1"), portable.Handler())
+				// What Pocket Search and Pocket Hub ask every app (capabilities in links.go).
+				r.Get(strings.TrimPrefix(core.SearchPath, "/api/v1"), core.SearchHandler(s.pocketSearch))
+				r.Get(strings.TrimPrefix(core.WidgetPath, "/api/v1"), core.WidgetHandler(s.pocketWidget))
 
 				r.Get("/clouds/providers", s.handleCloudProviders)
 				r.Get("/clouds/apps", s.handleCloudApps)
@@ -495,7 +498,7 @@ func (s *Server) coreLoop(ctx context.Context) {
 
 func (s *Server) registerWithCore(ctx context.Context) error {
 	m := core.Manifest{
-		Slug: "files", Name: "Pocket Files",
+		Slug: "files", Name: "Pocket Files", Category: "Files",
 		Description: "Your files on the box: a home folder per person, server folders mounted for the household, folders shared between people, a WebDAV drive for other apps, and SkySend-style links — encrypted in the browser, with expiry, download limits and passwords — plus upload links for others.",
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "FILES",
@@ -503,6 +506,8 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Offers:    linkOffers,
 		Uses:      linkUses,
 		Portable:  portable,
+		// What Pocket Search and Pocket Hub may ask (links.go); Register adds their pocket:* offers.
+		Capabilities: capabilities,
 	}
 	if s.cfg.BaseURL != "" {
 		m.OIDC = &core.OIDCRequest{RedirectURIs: []string{s.cfg.BaseURL + "/api/v1/auth/oidc/callback"}}

@@ -19,6 +19,8 @@ Places are *spaces*: `home` (your files), `mount:<id>`, `share:<id>`. Paths insi
 | `GET /export.zip` | All of My files as one zip, streamed (Pocket Move; not mounts or shares) |
 | `POST /import` | Multipart `file` = a zip, unpacked into `Moved in YYYY-MM-DD` in My files; files already there with the same content are skipped (Pocket Move) |
 | `GET /pocket/portable` | What Pocket Move may copy out and bring in |
+| `GET /pocket/search?q=&limit=` | For Pocket Search: the same search as `GET /search`, in the shape every Pocket app answers in → `{items: [{id: "<space>:<path>", title, snippet, kind: "file"\|"folder", date, url}]}`. `snippet` is the text found (plain, no marks) or where the file is (`My files/Papers`); `url` opens it in the app |
+| `GET /pocket/widget` | For Pocket Hub: the six files changed last in My files, your drives and the folders shared with you (not mounts) → `{line: "3 files changed today", metrics: [{label: "Files", value}, {label: "Space used", value}], items: [{id, title, detail: "today · Papers", url}], url}`. Read from the search index; the totals are the last ones counted for the sidebar |
 | `GET /fs/thumb?space=&path=&size=` | JPEG thumbnail of a JPEG/PNG/GIF/WebP |
 | `PUT /fs/upload?space=&path=<folder>&name=<name or sub/path>&conflict=rename\|overwrite\|skip\|fail&mtime=<ms>` | Body = the file |
 | `POST /fs/mkdir` `{space, path}` | New folder (parents too) |

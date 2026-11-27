@@ -33,12 +33,17 @@ text is read in the background.
 
 Results only ever come from places the person can open: their home, mounts they have access to, their
 own connected drives, and folders shared with them (under that share's name and paths).
+That holds for every way of asking: the app's own search, the folder search, and what Pocket Search and
+Pocket Hub read through Pocket Core (`/api/v1/pocket/search`, `/api/v1/pocket/widget`) all go through the
+same list of places, worked out for the person at the moment they ask. A share that ends is gone from
+the next answer.
 
 ## API
 
 | Route | |
 | --- | --- |
 | `GET /api/v1/search?q=&limit=` | everywhere → `{hits: [{space, path, name, folder, is_dir, size, modified, ext, match: "name"\|"content", snippet?}], took_ms}` |
+| `GET /api/v1/pocket/search?q=&limit=` | everywhere, for Pocket Search (link scope `pocket:search`) → `{items: [{id, title, snippet, kind, date, url}]}`: the same hits, the snippet without marks, an address that opens the file in the app |
 | `GET /api/v1/fs/search?space=&path=&q=` | below one folder → `{entries: [Entry + match, snippet], partial}` |
 | `GET /api/v1/search/status` | `{available, status: {files, folders, text_read, text_pending, index_bytes}}` |
 | `POST /api/v1/search/rebuild` | admins: drop and rebuild the index |

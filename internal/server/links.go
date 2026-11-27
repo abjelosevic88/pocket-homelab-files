@@ -29,6 +29,19 @@ var linkUses = []core.Use{
 	{App: "office", Scopes: []string{"office:open"}, Reason: "Offer “Open in Pocket Office” on Word, Excel and PowerPoint files, once Pocket Office can reach your files"},
 }
 
+// capabilities are what Pocket Search and Pocket Hub may ask here for a
+// person (docs/capabilities.md in pocket-homelab-core): one value for the
+// manifest, the routes and linkAllows. The answers are in capabilities.go.
+//
+// No day: the app keeps no record of what happened. The index knows each
+// file's own date, and an upload keeps the date the file had on the device
+// it came from, so "added that day" has no honest answer. No capture: a file
+// needs a name and a folder, which is a form.
+var capabilities = core.Capabilities{
+	Search: &core.Searchable{What: "Your files and folders, by name and by the text inside documents", Kinds: []string{"file", "folder"}, Bangs: []string{"files", "file"}},
+	Widget: &core.Widget{Title: "Recent files", What: "The files changed last in My files, your drives and the folders shared with you, and how much My files holds"},
+}
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp
@@ -50,7 +63,7 @@ var linkRoutes = []linkRoute{
 var errLinkScope = errors.New("outside the link's scope")
 
 func linkAllows(scopes []string, r *http.Request) bool {
-	if portable.LinkAllows(scopes, r) {
+	if portable.LinkAllows(scopes, r) || capabilities.LinkAllows(scopes, r) {
 		return true
 	}
 	for _, lr := range linkRoutes {

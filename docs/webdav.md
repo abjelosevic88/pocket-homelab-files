@@ -20,14 +20,23 @@ browser's session cookie, only explicit credentials.
 
 ## For other Pocket apps (through Pocket Core)
 
-Pocket Files registers with Core as `files` and offers two link scopes:
+Pocket Files registers with Core as `files` and offers these link scopes:
 
 | Scope | Allows |
 | :--- | :--- |
 | `files:read` | WebDAV `GET HEAD OPTIONS PROPFIND`; API `GET /api/v1/spaces`, `/stars`, `/fs/list`, `/fs/stat`, `/fs/raw`, `/fs/zip`, `/fs/search`, `/fs/thumb`, `/fs/usage` |
 | `files:write` | WebDAV `PUT DELETE MKCOL MOVE COPY PROPPATCH LOCK UNLOCK`; API `PUT /fs/upload`, `POST /fs/mkdir|move|copy|rename|delete|text` |
 
+| `pocket:search` | `GET /api/v1/pocket/search?q=&limit=` and nothing else: Pocket Search finds your files and folders by name and by the text inside ([search.md](search.md)) |
+| `pocket:widget` | `GET /api/v1/pocket/widget` and nothing else: Pocket Hub shows the files changed last |
+
 Sends, upload links, shares, mounts, settings and tokens stay closed to links.
+
+The two `pocket:*` scopes are Pocket Core's capabilities (`docs/capabilities.md` in Pocket Core): the
+manifest says Files is on the `Files` shelf, can be searched (`!files`, `!file`) and has a widget, and
+the apps that ask find it on their own. Both answer for the person the token acts for and only from
+places that person can open; neither changes anything. `files:read` does not open them, and they do
+not open anything `files:read` does.
 
 An app that wants to keep a person's files here:
 

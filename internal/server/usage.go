@@ -132,6 +132,17 @@ func (s *Server) saveUsage() {
 	}
 }
 
+// knownUsage returns a folder's totals as they were last counted, and whether there are any.
+// Unlike dirUsage it never starts a count: for callers that must not make the server walk folders.
+func (s *Server) knownUsage(sp *vfs.Space) (folderUsage, bool) {
+	c := &s.usage
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s.loadUsage()
+	u, ok := c.byRoot[sp.Root]
+	return u, ok
+}
+
 // homeUsage returns the person's file count and bytes, and whether a fresher count is on its way.
 func (s *Server) homeUsage(uid int64) (files int, size int64, stale bool) {
 	u, _, stale := s.dirUsage(s.homeSpace(uid), 0, true)
