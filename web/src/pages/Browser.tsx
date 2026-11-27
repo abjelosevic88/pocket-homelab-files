@@ -22,12 +22,12 @@ type Dialog =
 
 const THUMB_TYPES = /^image\/(jpeg|png|gif|webp)$/
 
-/** Splits /f/<space>/<path…> into a space id and a path. */
+/** Splits /f/<space>/<path…> into a space id and a path. The router has decoded both already:
+ *  decoding again broke every folder with a % in its name ("50% off"). */
 function useLocationSpace() {
   const params = useParams()
-  const space = decodeURIComponent(params.space || 'home')
-  const rest = (params['*'] || '').split('/').filter(Boolean).map(decodeURIComponent)
-  return { space, path: '/' + rest.join('/') }
+  const rest = (params['*'] || '').split('/').filter(Boolean)
+  return { space: params.space || 'home', path: '/' + rest.join('/') }
 }
 
 export default function Browser() {
